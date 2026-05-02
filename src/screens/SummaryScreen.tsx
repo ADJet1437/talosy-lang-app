@@ -42,7 +42,7 @@ export function SummaryScreen({ navigation, route }: Props) {
         </View>
       )}
 
-      <TouchableOpacity style={styles.againBtn} onPress={() => navigation.popToTop()}>
+      <TouchableOpacity style={styles.againBtn} onPress={() => navigation.navigate('Home')}>
         <Text style={styles.againBtnText}>Practice Again</Text>
       </TouchableOpacity>
     </ScrollView>

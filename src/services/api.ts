@@ -3,13 +3,6 @@ const WS_BASE = 'ws://localhost:8001/api/v1';
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
-export type Scenario = {
-  id: string;
-  emoji: string;
-  title: string;
-  description: string;
-};
-
 export type SessionSummary = {
   exchanges: number;
   level: string | null;
@@ -17,140 +10,17 @@ export type SessionSummary = {
   improvements: string[];
 };
 
-export type Role = {
-  id: string;
-  name: string;
-  description: string;
-};
+// ─── Session ──────────────────────────────────────────────────────────────────
 
-export type Scene = {
-  description: string;
-  roles: Role[];
-};
-
-export type SpeechEvaluation = {
-  accuracy_score: number;
-  fluency_score: number;
-  matched_sentences: number;
-  total_sentences: number;
-  strengths: string[];
-  improvements: string[];
-  overall_feedback: string;
-};
-
-// ─── Mode 3: Conversation ─────────────────────────────────────────────────────
-
-export async function fetchScenarios(): Promise<Scenario[]> {
-  const res = await fetch(`${BASE_URL}/talkos/scenarios`);
-  if (!res.ok) throw new Error(`Failed to fetch scenarios: ${res.status}`);
-  return res.json();
-}
-
-export async function createSession(
-  scenarioId: string,
-  language: string,
-  level?: string,
-): Promise<string> {
+export async function createSession(language?: string, level?: string): Promise<string> {
   const res = await fetch(`${BASE_URL}/talkos/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ scenario_id: scenarioId, language, level: level ?? null }),
+    body: JSON.stringify({ language: language ?? 'English', level: level ?? null }),
   });
   if (!res.ok) throw new Error(`Failed to create session: ${res.status}`);
   const data = await res.json();
   return data.session_id;
-}
-
-// ─── Mode 1 & 2: Content ──────────────────────────────────────────────────────
-
-export async function fetchTopics(): Promise<string[]> {
-  const res = await fetch(`${BASE_URL}/talkos/topics`);
-  if (!res.ok) throw new Error(`Failed to fetch topics: ${res.status}`);
-  return res.json();
-}
-
-export async function generateContent(
-  topic: string,
-  level: string,
-  language: string,
-): Promise<string> {
-  const res = await fetch(`${BASE_URL}/talkos/content/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ topic, level, language }),
-  });
-  if (!res.ok) throw new Error(`Failed to generate content: ${res.status}`);
-  const data = await res.json();
-  return data.text;
-}
-
-export async function pronounceText(text: string, language: string): Promise<string> {
-  const res = await fetch(`${BASE_URL}/talkos/content/pronounce`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, language }),
-  });
-  if (!res.ok) throw new Error(`Failed to get pronunciation: ${res.status}`);
-  const data = await res.json();
-  return data.audio; // base64 mp3
-}
-
-export async function transcribeAudio(base64Audio: string, language: string): Promise<string> {
-  const res = await fetch(`${BASE_URL}/talkos/content/transcribe`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ audio: base64Audio, language }),
-  });
-  if (!res.ok) throw new Error(`Failed to transcribe: ${res.status}`);
-  const data = await res.json();
-  return data.transcript;
-}
-
-export async function evaluateSpeech(
-  originalText: string,
-  transcript: string,
-  language: string,
-): Promise<SpeechEvaluation> {
-  const res = await fetch(`${BASE_URL}/talkos/content/evaluate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ original_text: originalText, transcript, language }),
-  });
-  if (!res.ok) throw new Error(`Failed to evaluate: ${res.status}`);
-  return res.json();
-}
-
-export async function generateScene(topic: string, language: string): Promise<Scene> {
-  const res = await fetch(`${BASE_URL}/talkos/scenes/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ topic, language }),
-  });
-  if (!res.ok) throw new Error(`Failed to generate scene: ${res.status}`);
-  return res.json();
-}
-
-export async function generateRoleContent(
-  sceneDescription: string,
-  roleName: string,
-  roleDescription: string,
-  level: string,
-  language: string,
-): Promise<string> {
-  const res = await fetch(`${BASE_URL}/talkos/content/generate-role`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      scene_description: sceneDescription,
-      role_name: roleName,
-      role_description: roleDescription,
-      level,
-      language,
-    }),
-  });
-  if (!res.ok) throw new Error(`Failed to generate role content: ${res.status}`);
-  const data = await res.json();
-  return data.text;
 }
 
 // ─── WebSocket types ──────────────────────────────────────────────────────────

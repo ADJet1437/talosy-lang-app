@@ -8,23 +8,22 @@ import {
 import * as FileSystem from 'expo-file-system/legacy';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { SessionSummary, TalkosWS } from '../services/api';
+import { SessionSummary, TalkosWS, createSession } from '../services/api';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Conversation'>;
-type AppState = 'connecting' | 'ai_speaking' | 'listening' | 'processing' | 'ended';
+type AppState = 'setup' | 'connecting' | 'ai_speaking' | 'listening' | 'processing' | 'ended';
 type Message = { role: 'user' | 'ai'; text: string };
 
-const SPEECH_THRESHOLD = -35;   // dB above this = user is speaking
-const SILENCE_MS = 1800;        // ms of silence after speech before auto-submit
-const VAD_INTERVAL_MS = 100;    // poll metering every 100ms
+const SPEECH_THRESHOLD = -35;
+const SILENCE_MS = 1800;
+const VAD_INTERVAL_MS = 100;
 
 export function ConversationScreen({ navigation, route }: Props) {
-  const { sessionId, scenario } = route.params;
-
-  const [appState, setAppState] = useState<AppState>('connecting');
+  const { language } = route.params;
+  const [appState, setAppState] = useState<AppState>('setup');
   const [messages, setMessages] = useState<Message[]>([]);
   const [level, setLevel] = useState<string | null>(null);
 
@@ -171,51 +170,62 @@ export function ConversationScreen({ navigation, route }: Props) {
   }, [stopVadPolling]);
 
   useEffect(() => {
-    const ws = new TalkosWS(sessionId, {
-      onReady: (openingText, openingAudio) => {
-        console.log('[WS] onReady, hasAudio:', !!openingAudio);
-        addMessage('ai', openingText);
-        if (openingAudio) {
-          setAppState('ai_speaking');
-          playAudio(openingAudio, enterListening);
-        } else {
+    let cancelled = false;
+
+    createSession(language).then((sessionId) => {
+      if (cancelled) return;
+      setAppState('connecting');
+
+      const ws = new TalkosWS(sessionId, {
+        onReady: (openingText, openingAudio) => {
+          console.log('[WS] onReady, hasAudio:', !!openingAudio);
+          addMessage('ai', openingText);
+          if (openingAudio) {
+            setAppState('ai_speaking');
+            playAudio(openingAudio, enterListening);
+          } else {
+            enterListening();
+          }
+        },
+        onTranscript: (text) => {
+          console.log('[WS] transcript:', text);
+          addMessage('user', text);
+        },
+        onNoSpeech: () => {
+          console.warn('[WS] no_speech → re-listening');
           enterListening();
-        }
-      },
-      onTranscript: (text) => {
-        console.log('[WS] transcript:', text);
-        addMessage('user', text);
-      },
-      onNoSpeech: () => {
-        console.warn('[WS] no_speech → re-listening');
-        enterListening();
-      },
-      onAIResponse: (text, audio, newLevel) => {
-        console.log('[WS] ai_response, level:', newLevel);
-        addMessage('ai', text);
-        if (newLevel) setLevel(newLevel);
-        setAppState('ai_speaking');
-        playAudio(audio, enterListening);
-      },
-      onSessionEnd: (summary: SessionSummary) => {
-        setAppState('ended');
-        navigation.replace('Summary', { summary });
-      },
-      onError: (msg) => {
-        console.error('[WS] error:', msg);
-        Alert.alert('Connection error', msg);
-        navigation.goBack();
-      },
-      onClose: () => console.warn('[WS] closed'),
+        },
+        onAIResponse: (text, audio, newLevel) => {
+          console.log('[WS] ai_response, level:', newLevel);
+          addMessage('ai', text);
+          if (newLevel) setLevel(newLevel);
+          setAppState('ai_speaking');
+          playAudio(audio, enterListening);
+        },
+        onSessionEnd: (summary: SessionSummary) => {
+          setAppState('ended');
+          navigation.replace('Summary', { summary });
+        },
+        onError: (msg) => {
+          console.error('[WS] error:', msg);
+          Alert.alert('Connection error', msg);
+          navigation.goBack();
+        },
+        onClose: () => console.warn('[WS] closed'),
+      });
+      wsRef.current = ws;
+    }).catch((e) => {
+      console.error('[SETUP] createSession error:', e);
+      Alert.alert('Error', 'Could not start session. Is the server running?');
     });
-    wsRef.current = ws;
 
     return () => {
+      cancelled = true;
       isActiveRef.current = false;
       stopVadPolling();
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       recorder.stop().catch(() => {});
-      ws.close();
+      wsRef.current?.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -229,17 +239,26 @@ export function ConversationScreen({ navigation, route }: Props) {
   }
 
   const stateLabel: Record<AppState, string> = {
+    setup: 'Starting…',
     connecting: 'Connecting…',
-    ai_speaking: `${scenario.title} is speaking…`,
+    ai_speaking: 'Speaking…',
     listening: 'Listening… speak when ready',
     processing: 'Processing…',
     ended: 'Session ended',
   };
 
+  if (appState === 'setup') {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color="#7c6af7" size="large" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.scenarioTitle}>{scenario.emoji} {scenario.title}</Text>
+        <Text style={styles.headerTitle}>Talkos</Text>
         {level && <Text style={styles.levelBadge}>{level}</Text>}
       </View>
 
@@ -273,18 +292,19 @@ export function ConversationScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
+  center: { flex: 1, backgroundColor: '#1a1a2e', alignItems: 'center', justifyContent: 'center' },
   container: { flex: 1, backgroundColor: '#1a1a2e' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 8,
+    paddingTop: 56,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#2a2a4a',
   },
-  scenarioTitle: { color: '#e0e0ff', fontSize: 15, fontWeight: '600' },
+  headerTitle: { color: '#e0e0ff', fontSize: 18, fontWeight: '700' },
   levelBadge: {
     color: '#7c6af7',
     fontSize: 12,
