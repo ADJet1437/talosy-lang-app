@@ -16,12 +16,6 @@ export function SummaryScreen({ navigation, route }: Props) {
           <Text style={styles.statValue}>{summary.exchanges}</Text>
           <Text style={styles.statLabel}>exchanges</Text>
         </View>
-        {summary.level && (
-          <View style={styles.statBox}>
-            <Text style={[styles.statValue, styles.levelValue]}>{summary.level}</Text>
-            <Text style={styles.statLabel}>your level</Text>
-          </View>
-        )}
       </View>
 
       {summary.highlights.length > 0 && (
@@ -67,7 +61,6 @@ const styles = StyleSheet.create({
     borderColor: '#2a2a4a',
   },
   statValue: { color: '#7c6af7', fontSize: 36, fontWeight: '800' },
-  levelValue: { fontSize: 22, textTransform: 'capitalize' },
   statLabel: { color: '#8888aa', fontSize: 13, marginTop: 4 },
   card: {
     backgroundColor: '#16213e',

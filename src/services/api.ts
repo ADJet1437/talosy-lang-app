@@ -5,18 +5,17 @@ const WS_BASE = 'ws://localhost:8001/api/v1';
 
 export type SessionSummary = {
   exchanges: number;
-  level: string | null;
   highlights: string[];
   improvements: string[];
 };
 
 // ─── Session ──────────────────────────────────────────────────────────────────
 
-export async function createSession(language?: string, level?: string): Promise<string> {
+export async function createSession(language?: string, nativeLanguage?: string, level?: string): Promise<string> {
   const res = await fetch(`${BASE_URL}/talkos/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ language: language ?? 'English', level: level ?? null }),
+    body: JSON.stringify({ language: language ?? 'English', native_language: nativeLanguage ?? 'English', level: level ?? null }),
   });
   if (!res.ok) throw new Error(`Failed to create session: ${res.status}`);
   const data = await res.json();
@@ -25,13 +24,22 @@ export async function createSession(language?: string, level?: string): Promise<
 
 // ─── WebSocket types ──────────────────────────────────────────────────────────
 
+export type TeachingData =
+  | { tool: 'suggest_vocabulary'; data: { simple_word: string; suggestions: string[]; example: string } }
+  | { tool: 'correct_sentence'; data: { original: string; corrected: string; explanation: string } }
+  | { tool: 'generate_article'; data: { article: string; topic: string } }
+  | { tool: 'define'; data: { word: string; language: string; definition: string; example: string } }
+  | { tool: 'pronounce'; data: { word: string; phonetic: string; speed: string } }
+  | { tool: 'language_switch_reminder'; data: { detected_language: string; target_language: string; last_target_utterance: string; reminder_level: 'gentle' | 'firm' | 'encouraging' } };
+
 export type WSIncoming =
   | { type: 'ready'; opening_text: string; opening_audio: string | null }
   | { type: 'transcript'; text: string }
   | { type: 'ai_response'; text: string; audio: string; level?: string }
   | { type: 'no_speech' }
   | { type: 'session_end'; summary: SessionSummary }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | ({ type: 'teaching' } & TeachingData);
 
 export type WSHandlers = {
   onReady: (openingText: string, openingAudio: string | null) => void;
@@ -39,6 +47,7 @@ export type WSHandlers = {
   onAIResponse: (text: string, audio: string, level?: string) => void;
   onNoSpeech: () => void;
   onSessionEnd: (summary: SessionSummary) => void;
+  onTeaching: (payload: TeachingData) => void;
   onError: (message: string) => void;
   onClose: () => void;
 };
@@ -70,6 +79,9 @@ export class TalkosWS {
           break;
         case 'no_speech':
           handlers.onNoSpeech();
+          break;
+        case 'teaching':
+          handlers.onTeaching({ tool: msg.tool, data: msg.data } as TeachingData);
           break;
         case 'session_end':
           handlers.onSessionEnd(msg.summary);

@@ -75,17 +75,30 @@ const LANGUAGES = [
   { name: 'Yoruba',     flag: '🇳🇬' },
 ];
 
+type ModalTarget = 'learn' | 'native';
+
 export function HomeScreen({ navigation }: Props) {
-  const [selected, setSelected] = useState(LANGUAGES.find((l) => l.name === 'English')!);
+  const [learnLang, setLearnLang] = useState(LANGUAGES.find((l) => l.name === 'English')!);
+  const [nativeLang, setNativeLang] = useState(LANGUAGES.find((l) => l.name === 'English')!);
+  const [modalTarget, setModalTarget] = useState<ModalTarget>('learn');
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState('');
+
+  const active = modalTarget === 'learn' ? learnLang : nativeLang;
 
   const filtered = search.trim()
     ? LANGUAGES.filter((l) => l.name.toLowerCase().includes(search.toLowerCase()))
     : LANGUAGES;
 
+  function openModal(target: ModalTarget) {
+    setModalTarget(target);
+    setSearch('');
+    setModalOpen(true);
+  }
+
   function pick(lang: typeof LANGUAGES[0]) {
-    setSelected(lang);
+    if (modalTarget === 'learn') setLearnLang(lang);
+    else setNativeLang(lang);
     setModalOpen(false);
     setSearch('');
   }
@@ -99,16 +112,23 @@ export function HomeScreen({ navigation }: Props) {
 
       <View style={styles.middle}>
         <Text style={styles.label}>I want to practice</Text>
-        <TouchableOpacity style={styles.dropdown} onPress={() => setModalOpen(true)} activeOpacity={0.8}>
-          <Text style={styles.dropdownFlag}>{selected.flag}</Text>
-          <Text style={styles.dropdownText}>{selected.name}</Text>
+        <TouchableOpacity style={styles.dropdown} onPress={() => openModal('learn')} activeOpacity={0.8}>
+          <Text style={styles.dropdownFlag}>{learnLang.flag}</Text>
+          <Text style={styles.dropdownText}>{learnLang.name}</Text>
+          <Text style={styles.dropdownChevron}>›</Text>
+        </TouchableOpacity>
+
+        <Text style={[styles.label, { marginTop: 8 }]}>I speak</Text>
+        <TouchableOpacity style={styles.dropdown} onPress={() => openModal('native')} activeOpacity={0.8}>
+          <Text style={styles.dropdownFlag}>{nativeLang.flag}</Text>
+          <Text style={styles.dropdownText}>{nativeLang.name}</Text>
           <Text style={styles.dropdownChevron}>›</Text>
         </TouchableOpacity>
       </View>
 
       <TouchableOpacity
         style={styles.startBtn}
-        onPress={() => navigation.navigate('Conversation', { language: selected.name })}
+        onPress={() => navigation.navigate('Conversation', { language: learnLang.name, nativeLanguage: nativeLang.name })}
         activeOpacity={0.85}
       >
         <Text style={styles.startBtnText}>Start Talking</Text>
@@ -117,7 +137,9 @@ export function HomeScreen({ navigation }: Props) {
       <Modal visible={modalOpen} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={styles.modal}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Select Language</Text>
+            <Text style={styles.modalTitle}>
+              {modalTarget === 'learn' ? 'I want to practice' : 'I speak'}
+            </Text>
             <TouchableOpacity onPress={() => { setModalOpen(false); setSearch(''); }}>
               <Text style={styles.modalClose}>Done</Text>
             </TouchableOpacity>
@@ -140,14 +162,14 @@ export function HomeScreen({ navigation }: Props) {
             keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <TouchableOpacity
-                style={[styles.row, item.name === selected.name && styles.rowActive]}
+                style={[styles.row, item.name === active.name && styles.rowActive]}
                 onPress={() => pick(item)}
               >
                 <Text style={styles.rowFlag}>{item.flag}</Text>
-                <Text style={[styles.rowName, item.name === selected.name && styles.rowNameActive]}>
+                <Text style={[styles.rowName, item.name === active.name && styles.rowNameActive]}>
                   {item.name}
                 </Text>
-                {item.name === selected.name && <Text style={styles.rowCheck}>✓</Text>}
+                {item.name === active.name && <Text style={styles.rowCheck}>✓</Text>}
               </TouchableOpacity>
             )}
           />

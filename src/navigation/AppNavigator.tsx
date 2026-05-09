@@ -8,7 +8,7 @@ import { SessionSummary } from '../services/api';
 
 export type RootStackParamList = {
   Home: undefined;
-  Conversation: { language: string };
+  Conversation: { language: string; nativeLanguage: string };
   Summary: { summary: SessionSummary };
 };
 
