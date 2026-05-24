@@ -11,122 +11,28 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { SessionSummary, TeachingData, TalkosWS, createSession } from '../services/api';
+import { TalkosWS, createSession, fetchTTSBase64 } from '../services/api';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Conversation'>;
 type AppState = 'setup' | 'connecting' | 'ai_speaking' | 'listening' | 'processing' | 'paused' | 'ended';
-type Message = { role: 'user' | 'ai'; text: string };
+type Message = { role: 'user' | 'ai'; text: string; translation?: string };
 
 const SPEECH_THRESHOLD = -25;
 const SILENCE_MS = 1800;
 const VAD_INTERVAL_MS = 100;
-
-function TeachingCard({ payload, onDismiss }: { payload: TeachingData; onDismiss: () => void }) {
-  if (payload.tool === 'suggest_vocabulary') {
-    const { simple_word, suggestions, example } = payload.data;
-    return (
-      <View style={cardStyles.card}>
-        <View style={cardStyles.row}>
-          <Text style={cardStyles.icon}>💡</Text>
-          <Text style={cardStyles.title}>Better word than "{simple_word}"</Text>
-          <TouchableOpacity onPress={onDismiss}><Text style={cardStyles.dismiss}>✕</Text></TouchableOpacity>
-        </View>
-        <Text style={cardStyles.suggestions}>{suggestions.join('  ·  ')}</Text>
-        <Text style={cardStyles.example}>{example}</Text>
-      </View>
-    );
-  }
-
-  if (payload.tool === 'correct_sentence') {
-    const { original, corrected, explanation } = payload.data;
-    return (
-      <View style={cardStyles.card}>
-        <View style={cardStyles.row}>
-          <Text style={cardStyles.icon}>✏️</Text>
-          <Text style={cardStyles.title}>Sentence correction</Text>
-          <TouchableOpacity onPress={onDismiss}><Text style={cardStyles.dismiss}>✕</Text></TouchableOpacity>
-        </View>
-        <Text style={cardStyles.original}>"{original}"</Text>
-        <Text style={cardStyles.corrected}>→  "{corrected}"</Text>
-        <Text style={cardStyles.example}>{explanation}</Text>
-      </View>
-    );
-  }
-
-  if (payload.tool === 'generate_article') {
-    const { article, topic } = payload.data;
-    return (
-      <View style={cardStyles.card}>
-        <View style={cardStyles.row}>
-          <Text style={cardStyles.icon}>📖</Text>
-          <Text style={cardStyles.title}>Practice: {topic}</Text>
-          <TouchableOpacity onPress={onDismiss}><Text style={cardStyles.dismiss}>✕</Text></TouchableOpacity>
-        </View>
-        <Text style={cardStyles.article}>{article}</Text>
-      </View>
-    );
-  }
-
-  if (payload.tool === 'define') {
-    const { word, definition, example } = payload.data;
-    return (
-      <View style={cardStyles.card}>
-        <View style={cardStyles.row}>
-          <Text style={cardStyles.icon}>📚</Text>
-          <Text style={cardStyles.title}>{word}</Text>
-          <TouchableOpacity onPress={onDismiss}><Text style={cardStyles.dismiss}>✕</Text></TouchableOpacity>
-        </View>
-        <Text style={cardStyles.example}>{definition}</Text>
-        <Text style={cardStyles.original}>"{example}"</Text>
-      </View>
-    );
-  }
-
-  if (payload.tool === 'pronounce') {
-    const { word, phonetic, speed } = payload.data;
-    return (
-      <View style={cardStyles.card}>
-        <View style={cardStyles.row}>
-          <Text style={cardStyles.icon}>🔊</Text>
-          <Text style={cardStyles.title}>{word}</Text>
-          <TouchableOpacity onPress={onDismiss}><Text style={cardStyles.dismiss}>✕</Text></TouchableOpacity>
-        </View>
-        <Text style={cardStyles.suggestions}>{phonetic}</Text>
-        <Text style={cardStyles.example}>Speed: {speed}</Text>
-      </View>
-    );
-  }
-
-  if (payload.tool === 'language_switch_reminder') {
-    const { detected_language, target_language, last_target_utterance, reminder_level } = payload.data;
-    const icon = reminder_level === 'encouraging' ? '💪' : '🌐';
-    const levelColor = reminder_level === 'firm' ? '#f0a040' : '#7c6af7';
-    return (
-      <View style={[cardStyles.card, { borderColor: levelColor }]}>
-        <View style={cardStyles.row}>
-          <Text style={cardStyles.icon}>{icon}</Text>
-          <Text style={cardStyles.title}>{detected_language} detected — let's speak {target_language}</Text>
-          <TouchableOpacity onPress={onDismiss}><Text style={cardStyles.dismiss}>✕</Text></TouchableOpacity>
-        </View>
-        <Text style={cardStyles.example}>Try again:</Text>
-        <View style={cardStyles.repeatBox}>
-          <Text style={cardStyles.repeatText}>"{last_target_utterance}"</Text>
-        </View>
-      </View>
-    );
-  }
-
-  return null;
-}
+const TEXT_STREAM_MS_PER_WORD = 50;
 
 export function ConversationScreen({ navigation, route }: Props) {
   const { language, nativeLanguage } = route.params;
   const [appState, setAppState] = useState<AppState>('setup');
   const [messages, setMessages] = useState<Message[]>([]);
-  const [level, setLevel] = useState<string | null>(null);
-  const [teaching, setTeaching] = useState<TeachingData | null>(null);
+  const [streamingText, setStreamingText] = useState('');
+  const [suggestion, setSuggestion] = useState('');
+  const [suggestionPlaying, setSuggestionPlaying] = useState(false);
+  const [suggestionSpeed, setSuggestionSpeed] = useState(1.0);
 
   const wsRef = useRef<TalkosWS | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const onFinishRef = useRef<(() => void) | null>(null);
 
@@ -136,13 +42,18 @@ export function ConversationScreen({ navigation, route }: Props) {
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const submitCalledRef = useRef(false);
   const vadIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const logCountRef = useRef(0);
+  const streamingFullTextRef = useRef('');
+  const streamingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const suggestionPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
+  const navigatedRef = useRef(false);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const recorder = useAudioRecorder(
     { ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true },
   );
+
+  // ─── VAD ───────────────────────────────────────────────────────────────────
 
   const stopVadPolling = useCallback(() => {
     if (vadIntervalRef.current) {
@@ -151,40 +62,35 @@ export function ConversationScreen({ navigation, route }: Props) {
     }
   }, []);
 
-  const startVadPolling = useCallback(() => {
-    stopVadPolling();
-    vadIntervalRef.current = setInterval(() => {
-      if (!isActiveRef.current) {
-        stopVadPolling();
-        return;
-      }
-      const status = recorder.getStatus();
-      const db = status.metering ?? -999;
+  // ─── Streaming text ─────────────────────────────────────────────────────────
 
-      logCountRef.current += 1;
-      if (logCountRef.current % 20 === 0) {
-        console.log(`[VAD] db=${db.toFixed(1)} spoken=${hasSpokenRef.current}`);
-      }
+  function startTextStream(text: string) {
+    if (streamingIntervalRef.current) { clearInterval(streamingIntervalRef.current); streamingIntervalRef.current = null; }
+    streamingFullTextRef.current = text;
+    setStreamingText('');
+    const words = text.split(' ');
+    let wordIdx = 0;
+    streamingIntervalRef.current = setInterval(() => {
+      wordIdx++;
+      setStreamingText(words.slice(0, wordIdx).join(' '));
+      if (wordIdx >= words.length) { clearInterval(streamingIntervalRef.current!); streamingIntervalRef.current = null; }
+    }, TEXT_STREAM_MS_PER_WORD);
+  }
 
-      if (db > SPEECH_THRESHOLD) {
-        hasSpokenRef.current = true;
-        if (silenceTimerRef.current) {
-          clearTimeout(silenceTimerRef.current);
-          silenceTimerRef.current = null;
-        }
-      } else if (hasSpokenRef.current && !silenceTimerRef.current) {
-        silenceTimerRef.current = setTimeout(() => {
-          silenceTimerRef.current = null;
-          triggerSubmit();
-        }, SILENCE_MS);
-      }
-    }, VAD_INTERVAL_MS);
-  }, [recorder, stopVadPolling]);
+  function flushStreaming() {
+    if (streamingIntervalRef.current) { clearInterval(streamingIntervalRef.current); streamingIntervalRef.current = null; }
+    streamingFullTextRef.current = '';
+    setStreamingText('');
+  }
 
-  const addMessage = useCallback((role: 'user' | 'ai', text: string) => {
-    setMessages((prev) => [...prev, { role, text }]);
+  // ─── Messages ───────────────────────────────────────────────────────────────
+
+  const addMessage = useCallback((role: 'user' | 'ai', text: string, translation?: string) => {
+    setMessages((prev) => [...prev, { role, text, translation }]);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   }, []);
+
+  // ─── Pulse animation ────────────────────────────────────────────────────────
 
   useEffect(() => {
     const shouldPulse = appState === 'listening' || appState === 'ai_speaking';
@@ -204,9 +110,10 @@ export function ConversationScreen({ navigation, route }: Props) {
     return () => animation.stop();
   }, [appState]);
 
+  // ─── Submit / listen cycle ──────────────────────────────────────────────────
+
   function triggerSubmit() {
-    if (!isActiveRef.current) return;
-    if (submitCalledRef.current) return;
+    if (!isActiveRef.current || submitCalledRef.current) return;
     submitCalledRef.current = true;
     isActiveRef.current = false;
     stopVadPolling();
@@ -214,17 +121,15 @@ export function ConversationScreen({ navigation, route }: Props) {
   }
 
   async function submitSpeech() {
-    console.log('[VAD] submitting speech');
     setAppState('processing');
+    setSuggestion('');
     try {
       await recorder.stop();
       const uri = recorder.uri;
-      console.log('[REC] uri:', uri);
       if (!uri) { enterListening(); return; }
       const base64 = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
-      console.log('[REC] base64 length:', base64.length);
       wsRef.current?.sendSpeech(base64);
     } catch (e) {
       console.error('[REC] submitSpeech error:', e);
@@ -233,14 +138,9 @@ export function ConversationScreen({ navigation, route }: Props) {
   }
 
   const enterListening = useCallback(async () => {
-    console.log('[STATE] enterListening');
     hasSpokenRef.current = false;
     submitCalledRef.current = false;
-    logCountRef.current = 0;
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
     stopVadPolling();
     try {
       const { granted } = await requestRecordingPermissionsAsync();
@@ -253,19 +153,29 @@ export function ConversationScreen({ navigation, route }: Props) {
       isActiveRef.current = true;
       recorder.record();
       setAppState('listening');
-      startVadPolling();
-      console.log('[REC] recording + VAD polling started ✓');
+
+      vadIntervalRef.current = setInterval(() => {
+        if (!isActiveRef.current) { stopVadPolling(); return; }
+        const db = recorder.getStatus().metering ?? -999;
+        if (db > SPEECH_THRESHOLD) {
+          hasSpokenRef.current = true;
+          if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+        } else if (hasSpokenRef.current && !silenceTimerRef.current) {
+          silenceTimerRef.current = setTimeout(() => { silenceTimerRef.current = null; triggerSubmit(); }, SILENCE_MS);
+        }
+      }, VAD_INTERVAL_MS);
     } catch (e) {
       console.error('[REC] enterListening error:', e);
     }
-  }, [recorder, startVadPolling, stopVadPolling]);
+  }, [recorder, stopVadPolling]);
+
+  // ─── Audio playback ─────────────────────────────────────────────────────────
 
   const playAudio = useCallback(async (base64Mp3: string, onFinish: () => void) => {
     isActiveRef.current = false;
     stopVadPolling();
     onFinishRef.current = onFinish;
 
-    console.log('[AUDIO] playAudio, length:', base64Mp3.length);
     try {
       const tempUri = `${FileSystem.cacheDirectory}ai_${Date.now()}.mp3`;
       await FileSystem.writeAsStringAsync(tempUri, base64Mp3, {
@@ -275,7 +185,6 @@ export function ConversationScreen({ navigation, route }: Props) {
       const player = createAudioPlayer({ uri: tempUri });
       player.addListener('playbackStatusUpdate', (status) => {
         if (status.didJustFinish) {
-          console.log('[AUDIO] finished → callback in 400ms');
           player.remove();
           setTimeout(() => {
             onFinishRef.current?.();
@@ -290,58 +199,64 @@ export function ConversationScreen({ navigation, route }: Props) {
     }
   }, [stopVadPolling]);
 
+  // ─── Session setup ──────────────────────────────────────────────────────────
+
   useEffect(() => {
     let cancelled = false;
 
     createSession(language, nativeLanguage).then((sessionId) => {
       if (cancelled) return;
+      sessionIdRef.current = sessionId;
       setAppState('connecting');
 
-      const ws = new TalkosWS(sessionId, {
+      const ws = new TalkosWS(sessionId, language, nativeLanguage, {
         onReady: (openingText, openingAudio) => {
-          console.log('[WS] onReady, hasAudio:', !!openingAudio);
-          addMessage('ai', openingText);
           if (openingAudio) {
+            startTextStream(openingText);
             setAppState('ai_speaking');
-            playAudio(openingAudio, () => { if (!isPausedRef.current) enterListening(); });
+            playAudio(openingAudio, () => {
+              addMessage('ai', openingText);
+              flushStreaming();
+              if (!isPausedRef.current) enterListening();
+            });
           } else {
+            addMessage('ai', openingText);
             enterListening();
           }
         },
-        onTranscript: (text) => {
-          console.log('[WS] transcript:', text);
-          addMessage('user', text);
-        },
-        onNoSpeech: () => {
-          console.warn('[WS] no_speech → re-listening');
-          if (!isPausedRef.current) enterListening();
-        },
-        onAIResponse: (text, audio, newLevel) => {
-          console.log('[WS] ai_response, level:', newLevel);
-          addMessage('ai', text);
-          if (newLevel) setLevel(newLevel);
+        onTranscript: (text) => addMessage('user', text),
+        onNoSpeech: () => { if (!isPausedRef.current) enterListening(); },
+        onAIResponse: (text, audio, translation, sug) => {
+          suggestionPlayerRef.current?.pause?.();
+          setSuggestionPlaying(false);
+          setSuggestion('');
+          startTextStream(text);
           setAppState('ai_speaking');
-          playAudio(audio, () => { if (!isPausedRef.current) enterListening(); else setAppState('paused'); });
+          playAudio(audio, () => {
+            addMessage('ai', text, translation);
+            flushStreaming();
+            if (sug) setSuggestion(sug);
+            if (!isPausedRef.current) enterListening();
+            else setAppState('paused');
+          });
         },
-        onTeaching: (payload) => {
-          console.log('[WS] teaching:', payload.tool);
-          setTeaching(payload);
-        },
-        onSessionEnd: (summary: SessionSummary) => {
-          setAppState('ended');
-          navigation.replace('Summary', { summary });
+        onSessionEnd: () => {
+          if (!navigatedRef.current && sessionIdRef.current) {
+            navigatedRef.current = true;
+            navigation.replace('Summary', { sessionId: sessionIdRef.current });
+          }
         },
         onError: (msg) => {
-          console.error('[WS] error:', msg);
           Alert.alert('Connection error', msg);
           navigation.goBack();
         },
-        onClose: () => console.warn('[WS] closed'),
+        onClose: () => {},
       });
       wsRef.current = ws;
     }).catch((e) => {
       console.error('[SETUP] createSession error:', e);
       Alert.alert('Error', 'Could not start session. Is the server running?');
+      navigation.goBack();
     });
 
     return () => {
@@ -349,17 +264,20 @@ export function ConversationScreen({ navigation, route }: Props) {
       isActiveRef.current = false;
       stopVadPolling();
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (streamingIntervalRef.current) clearInterval(streamingIntervalRef.current);
       recorder.stop().catch(() => {});
       wsRef.current?.close();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Controls ───────────────────────────────────────────────────────────────
 
   function handlePause() {
     isPausedRef.current = true;
     isActiveRef.current = false;
     stopVadPolling();
     if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+    flushStreaming();
     recorder.stop().catch(() => {});
     setAppState('paused');
   }
@@ -370,13 +288,46 @@ export function ConversationScreen({ navigation, route }: Props) {
   }
 
   function handleEndSession() {
+    if (navigatedRef.current || !sessionIdRef.current) return;
+    navigatedRef.current = true;
     isActiveRef.current = false;
     isPausedRef.current = false;
     stopVadPolling();
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    if (streamingIntervalRef.current) clearInterval(streamingIntervalRef.current);
     recorder.stop().catch(() => {});
     wsRef.current?.endSession();
+    navigation.replace('Summary', { sessionId: sessionIdRef.current });
   }
+
+  // ─── Suggestion TTS ─────────────────────────────────────────────────────────
+
+  async function handleSuggestionPlay() {
+    if (suggestionPlaying) {
+      suggestionPlayerRef.current?.pause?.();
+      setSuggestionPlaying(false);
+      return;
+    }
+    setSuggestionPlaying(true);
+    try {
+      const base64 = await fetchTTSBase64(suggestion, suggestionSpeed);
+      const uri = `${FileSystem.cacheDirectory}suggestion_${Date.now()}.mp3`;
+      await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
+      const player = createAudioPlayer({ uri });
+      suggestionPlayerRef.current = player;
+      player.addListener('playbackStatusUpdate', (status) => {
+        if (status.didJustFinish) {
+          player.remove();
+          setSuggestionPlaying(false);
+        }
+      });
+      player.play();
+    } catch {
+      setSuggestionPlaying(false);
+    }
+  }
+
+  // ─── State config ───────────────────────────────────────────────────────────
 
   const stateConfig: Record<AppState, { color: string; icon: string; spinner: boolean; label: string }> = {
     setup:       { color: '#2a2a4a', icon: '',   spinner: true,  label: 'Starting…' },
@@ -389,7 +340,7 @@ export function ConversationScreen({ navigation, route }: Props) {
   };
 
   const cfg = stateConfig[appState];
-  const pauseActive = appState === 'listening' || appState === 'paused';
+  const pauseActive = appState === 'listening' || appState === 'ai_speaking' || appState === 'processing' || appState === 'paused';
 
   if (appState === 'setup') {
     return (
@@ -405,6 +356,9 @@ export function ConversationScreen({ navigation, route }: Props) {
       <TouchableOpacity style={styles.header} onPress={() => navigation.goBack()} activeOpacity={0.7}>
         <Text style={styles.headerBack}>‹</Text>
         <Text style={styles.headerTitle}>Talkos</Text>
+        <View style={styles.headerLangTag}>
+          <Text style={styles.headerLangText}>{language}</Text>
+        </View>
       </TouchableOpacity>
 
       {/* State indicator */}
@@ -424,22 +378,51 @@ export function ConversationScreen({ navigation, route }: Props) {
         <Text style={styles.indicatorLabel}>{cfg.label}</Text>
       </View>
 
-      {/* Transcript */}
+      {/* Messages */}
       <ScrollView ref={scrollRef} style={styles.transcript} contentContainerStyle={styles.transcriptContent}>
         {messages.map((m, i) => (
-          <View key={i} style={[styles.bubble, m.role === 'user' ? styles.userBubble : styles.aiBubble]}>
-            <Text style={[styles.bubbleText, m.role === 'user' ? styles.userText : styles.aiText]}>
-              {m.text}
-            </Text>
-          </View>
+          m.role === 'user' ? (
+            <View key={i} style={[styles.bubble, styles.userBubble]}>
+              <Text style={[styles.bubbleText, styles.userText]}>{m.text}</Text>
+            </View>
+          ) : (
+            <View key={i} style={styles.aiBubbleWrap}>
+              <Text style={[styles.bubbleText, styles.aiText]}>{m.text}</Text>
+              {m.translation && (
+                <Text style={styles.translationText}>{m.translation}</Text>
+              )}
+            </View>
+          )
         ))}
+        {streamingText ? (
+          <View style={styles.aiBubbleWrap}>
+            <Text style={[styles.bubbleText, styles.aiText]}>{streamingText}</Text>
+          </View>
+        ) : null}
+        {suggestion ? (
+          <View style={styles.suggestionWrap}>
+            <Text style={styles.suggestionLabel}>try saying</Text>
+            <View style={styles.suggestionBox}>
+              <Text style={styles.suggestionText}>{suggestion}</Text>
+              <TouchableOpacity onPress={handleSuggestionPlay} style={styles.suggestionPlayBtn}>
+                <Text style={[styles.suggestionPlayIcon, suggestionPlaying && styles.suggestionPlayIconActive]}>
+                  {suggestionPlaying ? '⏸' : '▶'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setSuggestionSpeed(suggestionSpeed === 1.0 ? 0.75 : suggestionSpeed === 0.75 ? 0.5 : 1.0)}
+                style={styles.suggestionSpeedBtn}
+              >
+                <Text style={[styles.suggestionSpeedText, suggestionSpeed < 1 && styles.suggestionSpeedTextActive]}>
+                  {suggestionSpeed === 1.0 ? '1x' : suggestionSpeed === 0.75 ? '0.75x' : '0.5x'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
       </ScrollView>
 
-      {teaching && (
-        <TeachingCard payload={teaching} onDismiss={() => setTeaching(null)} />
-      )}
-
-      {/* Footer — 2 round buttons */}
+      {/* Footer */}
       <View style={styles.footer}>
         <TouchableOpacity
           style={[styles.roundBtnPrimary, !pauseActive && styles.roundBtnDisabled]}
@@ -462,11 +445,10 @@ const styles = StyleSheet.create({
   center: { flex: 1, backgroundColor: '#1a1a2e', alignItems: 'center', justifyContent: 'center' },
   container: { flex: 1, backgroundColor: '#1a1a2e' },
 
-  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     paddingHorizontal: 20,
     paddingTop: 56,
     paddingBottom: 12,
@@ -474,53 +456,56 @@ const styles = StyleSheet.create({
     borderBottomColor: '#2a2a4a',
   },
   headerBack: { color: '#7c6af7', fontSize: 28, fontWeight: '300', lineHeight: 32 },
-  headerTitle: { color: '#e0e0ff', fontSize: 18, fontWeight: '700' },
+  headerTitle: { color: '#e0e0ff', fontSize: 16, fontWeight: '700' },
+  headerLangTag: {
+    marginLeft: 6,
+    backgroundColor: '#16213e',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  headerLangText: { color: '#8888aa', fontSize: 12 },
 
-  // State indicator
-  indicatorArea: {
-    alignItems: 'center',
-    paddingVertical: 28,
-    gap: 14,
-  },
-  indicatorWrapper: {
-    width: 72,
-    height: 72,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  glowRing: {
-    position: 'absolute',
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    opacity: 0.25,
-  },
-  indicatorCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  indicatorArea: { alignItems: 'center', paddingVertical: 28, gap: 14 },
+  indicatorWrapper: { width: 72, height: 72, alignItems: 'center', justifyContent: 'center' },
+  glowRing: { position: 'absolute', width: 72, height: 72, borderRadius: 36, opacity: 0.25 },
+  indicatorCircle: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center' },
   indicatorIcon: { fontSize: 28 },
-  indicatorLabel: {
-    color: '#e0e0ff',
-    fontSize: 17,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
+  indicatorLabel: { color: '#e0e0ff', fontSize: 16, fontWeight: '600', letterSpacing: 0.3 },
 
-  // Transcript
   transcript: { flex: 1 },
   transcriptContent: { padding: 16, gap: 10, paddingBottom: 24 },
+
   bubble: { maxWidth: '80%', borderRadius: 16, padding: 12 },
   userBubble: { alignSelf: 'flex-end', backgroundColor: '#7c6af7' },
-  aiBubble: { alignSelf: 'flex-start', backgroundColor: '#16213e', borderWidth: 1, borderColor: '#2a2a4a' },
+  aiBubbleWrap: { alignSelf: 'flex-start', maxWidth: '85%', gap: 4 },
   bubbleText: { fontSize: 15, lineHeight: 22 },
   userText: { color: '#fff' },
   aiText: { color: '#e0e0ff' },
+  translationText: { color: '#6a6a9a', fontSize: 12, lineHeight: 18 },
 
-  // Footer — 3 round buttons
+  suggestionWrap: { alignSelf: 'flex-end', alignItems: 'flex-end', gap: 4, marginTop: 4 },
+  suggestionLabel: { color: '#8888aa', fontSize: 11 },
+  suggestionBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1e1e3e',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#5a4aaa',
+    borderStyle: 'dashed',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  suggestionText: { color: '#a89af7', fontSize: 14, flex: 1 },
+  suggestionPlayBtn: { padding: 4 },
+  suggestionPlayIcon: { color: '#5a4aaa', fontSize: 14 },
+  suggestionPlayIconActive: { color: '#7c6af7' },
+  suggestionSpeedBtn: { padding: 4 },
+  suggestionSpeedText: { color: '#5a4aaa', fontSize: 12, fontWeight: '700' },
+  suggestionSpeedTextActive: { color: '#a89af7' },
+
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-evenly',
@@ -531,57 +516,20 @@ const styles = StyleSheet.create({
     borderTopColor: '#2a2a4a',
   },
   roundBtnPrimary: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 56, height: 56, borderRadius: 28,
     backgroundColor: '#7c6af7',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
   roundBtnDisabled: {
     backgroundColor: '#16213e',
-    borderWidth: 1.5,
-    borderColor: '#2a2a4a',
+    borderWidth: 1.5, borderColor: '#2a2a4a',
+    opacity: 0.5,
   },
   roundBtnEnd: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 56, height: 56, borderRadius: 28,
     backgroundColor: '#16213e',
-    borderWidth: 1.5,
-    borderColor: '#3a2a2a',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderWidth: 1.5, borderColor: '#3a2a2a',
+    alignItems: 'center', justifyContent: 'center',
   },
-  roundBtnIcon: { fontSize: 20 },
-});
-
-const cardStyles = StyleSheet.create({
-  card: {
-    marginHorizontal: 16,
-    marginBottom: 8,
-    backgroundColor: '#16213e',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1.5,
-    borderColor: '#7c6af7',
-    gap: 6,
-  },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  icon: { fontSize: 16 },
-  title: { flex: 1, color: '#e0e0ff', fontSize: 13, fontWeight: '700' },
-  dismiss: { color: '#555577', fontSize: 14, paddingLeft: 8 },
-  suggestions: { color: '#7c6af7', fontSize: 14, fontWeight: '600' },
-  original: { color: '#888899', fontSize: 13, fontStyle: 'italic' },
-  corrected: { color: '#44aa88', fontSize: 14, fontWeight: '600' },
-  example: { color: '#8888aa', fontSize: 12 },
-  article: { color: '#c0c0e0', fontSize: 14, lineHeight: 22 },
-  repeatBox: {
-    backgroundColor: '#0d1426',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginTop: 2,
-  },
-  repeatText: { color: '#e0e0ff', fontSize: 14, fontWeight: '600' },
+  roundBtnIcon: { fontSize: 20, color: '#e0e0ff' },
 });

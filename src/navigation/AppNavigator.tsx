@@ -4,12 +4,11 @@ import React from 'react';
 import { ConversationScreen } from '../screens/ConversationScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { SummaryScreen } from '../screens/SummaryScreen';
-import { SessionSummary } from '../services/api';
 
 export type RootStackParamList = {
   Home: undefined;
   Conversation: { language: string; nativeLanguage: string };
-  Summary: { summary: SessionSummary };
+  Summary: { sessionId: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();

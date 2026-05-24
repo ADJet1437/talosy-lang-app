@@ -1,64 +1,97 @@
-const BASE_URL = 'http://localhost:8001/api/v1';
-const WS_BASE = 'ws://localhost:8001/api/v1';
+import Constants from 'expo-constants';
 
-// ─── Shared types ─────────────────────────────────────────────────────────────
+// ─── Host detection ───────────────────────────────────────────────────────────
+
+function getApiHost(): string {
+  if (__DEV__) {
+    // In Expo Go, debuggerHost is "192.168.x.x:PORT" — strip the port
+    const debugHost = (Constants as any).expoGoConfig?.debuggerHost as string | undefined;
+    if (debugHost) return debugHost.split(':')[0];
+  }
+  return 'localhost';
+}
+
+const HOST = getApiHost();
+const BASE_URL = `http://${HOST}:8000/api/v1`;
+const WS_BASE = `ws://${HOST}:8000/api/v1`;
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type SessionSummary = {
   exchanges: number;
-  highlights: string[];
-  improvements: string[];
+  nailed: string[];
+  nailed_type: 'sentences' | 'words';
+  covered_topics: string[];
 };
 
-// ─── Session ──────────────────────────────────────────────────────────────────
+export type WSIncoming =
+  | { type: 'ready'; opening_text: string; opening_audio: string | null }
+  | { type: 'transcript'; text: string }
+  | { type: 'ai_response'; text: string; audio: string; translation?: string; suggestion?: string }
+  | { type: 'no_speech' }
+  | { type: 'session_end' }
+  | { type: 'error'; message: string };
 
-export async function createSession(language?: string, nativeLanguage?: string, level?: string): Promise<string> {
+export type WSHandlers = {
+  onReady: (openingText: string, openingAudio: string | null) => void;
+  onTranscript: (text: string) => void;
+  onAIResponse: (text: string, audio: string, translation?: string, suggestion?: string) => void;
+  onNoSpeech: () => void;
+  onSessionEnd: () => void;
+  onError: (message: string) => void;
+  onClose: () => void;
+};
+
+// ─── API calls ────────────────────────────────────────────────────────────────
+
+export async function createSession(language: string, nativeLanguage: string): Promise<string> {
   const res = await fetch(`${BASE_URL}/talkos/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ language: language ?? 'English', native_language: nativeLanguage ?? 'English', level: level ?? null }),
+    body: JSON.stringify({ language, native_language: nativeLanguage }),
   });
   if (!res.ok) throw new Error(`Failed to create session: ${res.status}`);
   const data = await res.json();
   return data.session_id;
 }
 
-// ─── WebSocket types ──────────────────────────────────────────────────────────
+export async function fetchSummary(sessionId: string): Promise<SessionSummary | null> {
+  for (let attempt = 0; attempt < 15; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
+    try {
+      const res = await fetch(`${BASE_URL}/talkos/sessions/${sessionId}/summary`);
+      if (res.ok) return res.json();
+    } catch {
+      // retry
+    }
+  }
+  return null;
+}
 
-export type TeachingData =
-  | { tool: 'suggest_vocabulary'; data: { simple_word: string; suggestions: string[]; example: string } }
-  | { tool: 'correct_sentence'; data: { original: string; corrected: string; explanation: string } }
-  | { tool: 'generate_article'; data: { article: string; topic: string } }
-  | { tool: 'define'; data: { word: string; language: string; definition: string; example: string } }
-  | { tool: 'pronounce'; data: { word: string; phonetic: string; speed: string } }
-  | { tool: 'language_switch_reminder'; data: { detected_language: string; target_language: string; last_target_utterance: string; reminder_level: 'gentle' | 'firm' | 'encouraging' } };
-
-export type WSIncoming =
-  | { type: 'ready'; opening_text: string; opening_audio: string | null }
-  | { type: 'transcript'; text: string }
-  | { type: 'ai_response'; text: string; audio: string; level?: string }
-  | { type: 'no_speech' }
-  | { type: 'session_end'; summary: SessionSummary }
-  | { type: 'error'; message: string }
-  | ({ type: 'teaching' } & TeachingData);
-
-export type WSHandlers = {
-  onReady: (openingText: string, openingAudio: string | null) => void;
-  onTranscript: (text: string) => void;
-  onAIResponse: (text: string, audio: string, level?: string) => void;
-  onNoSpeech: () => void;
-  onSessionEnd: (summary: SessionSummary) => void;
-  onTeaching: (payload: TeachingData) => void;
-  onError: (message: string) => void;
-  onClose: () => void;
-};
+export async function fetchTTSBase64(text: string, speed: number): Promise<string> {
+  const res = await fetch(`${BASE_URL}/talkos/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, speed }),
+  });
+  if (!res.ok) throw new Error('TTS failed');
+  const blob = await res.blob();
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
 // ─── WebSocket client ─────────────────────────────────────────────────────────
 
 export class TalkosWS {
   private ws: WebSocket;
 
-  constructor(sessionId: string, handlers: WSHandlers) {
-    this.ws = new WebSocket(`${WS_BASE}/talkos/ws/${sessionId}`);
+  constructor(sessionId: string, language: string, nativeLanguage: string, handlers: WSHandlers) {
+    const params = new URLSearchParams({ language, native_language: nativeLanguage });
+    this.ws = new WebSocket(`${WS_BASE}/talkos/ws/${sessionId}?${params}`);
 
     this.ws.onmessage = (event) => {
       let msg: WSIncoming;
@@ -75,16 +108,13 @@ export class TalkosWS {
           handlers.onTranscript(msg.text);
           break;
         case 'ai_response':
-          handlers.onAIResponse(msg.text, msg.audio, msg.level);
+          handlers.onAIResponse(msg.text, msg.audio, msg.translation, msg.suggestion);
           break;
         case 'no_speech':
           handlers.onNoSpeech();
           break;
-        case 'teaching':
-          handlers.onTeaching({ tool: msg.tool, data: msg.data } as TeachingData);
-          break;
         case 'session_end':
-          handlers.onSessionEnd(msg.summary);
+          handlers.onSessionEnd();
           break;
         case 'error':
           handlers.onError(msg.message);

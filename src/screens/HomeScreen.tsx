@@ -3,83 +3,28 @@ import React, { useState } from 'react';
 import {
   FlatList,
   Modal,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../navigation/AppNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 const LANGUAGES = [
-  { name: 'Amharic',    flag: '🇪🇹' },
-  { name: 'Arabic',     flag: '🇸🇦' },
-  { name: 'Bengali',    flag: '🇧🇩' },
-  { name: 'Bulgarian',  flag: '🇧🇬' },
-  { name: 'Burmese',    flag: '🇲🇲' },
-  { name: 'Catalan',    flag: '🇪🇸' },
-  { name: 'Khmer',      flag: '🇰🇭' },
-  { name: 'Croatian',   flag: '🇭🇷' },
-  { name: 'Czech',      flag: '🇨🇿' },
-  { name: 'Danish',     flag: '🇩🇰' },
-  { name: 'Dutch',      flag: '🇳🇱' },
-  { name: 'English',    flag: '🇬🇧' },
-  { name: 'Estonian',   flag: '🇪🇪' },
-  { name: 'Filipino',   flag: '🇵🇭' },
-  { name: 'Finnish',    flag: '🇫🇮' },
-  { name: 'French',     flag: '🇫🇷' },
-  { name: 'German',     flag: '🇩🇪' },
-  { name: 'Greek',      flag: '🇬🇷' },
-  { name: 'Gujarati',   flag: '🇮🇳' },
-  { name: 'Hausa',      flag: '🇳🇬' },
-  { name: 'Hebrew',     flag: '🇮🇱' },
-  { name: 'Hindi',      flag: '🇮🇳' },
-  { name: 'Hungarian',  flag: '🇭🇺' },
-  { name: 'Indonesian', flag: '🇮🇩' },
-  { name: 'Italian',    flag: '🇮🇹' },
-  { name: 'Japanese',   flag: '🇯🇵' },
-  { name: 'Kannada',    flag: '🇮🇳' },
-  { name: 'Korean',     flag: '🇰🇷' },
-  { name: 'Latvian',    flag: '🇱🇻' },
-  { name: 'Lithuanian', flag: '🇱🇹' },
-  { name: 'Malay',      flag: '🇲🇾' },
-  { name: 'Malayalam',  flag: '🇮🇳' },
-  { name: 'Mandarin',   flag: '🇨🇳' },
-  { name: 'Marathi',    flag: '🇮🇳' },
-  { name: 'Nepali',     flag: '🇳🇵' },
-  { name: 'Norwegian',  flag: '🇳🇴' },
-  { name: 'Pashto',     flag: '🇦🇫' },
-  { name: 'Persian',    flag: '🇮🇷' },
-  { name: 'Polish',     flag: '🇵🇱' },
-  { name: 'Portuguese', flag: '🇧🇷' },
-  { name: 'Punjabi',    flag: '🇮🇳' },
-  { name: 'Romanian',   flag: '🇷🇴' },
-  { name: 'Russian',    flag: '🇷🇺' },
-  { name: 'Serbian',    flag: '🇷🇸' },
-  { name: 'Sinhalese',  flag: '🇱🇰' },
-  { name: 'Slovak',     flag: '🇸🇰' },
-  { name: 'Spanish',    flag: '🇪🇸' },
-  { name: 'Swahili',    flag: '🇰🇪' },
-  { name: 'Swedish',    flag: '🇸🇪' },
-  { name: 'Tamil',      flag: '🇮🇳' },
-  { name: 'Telugu',     flag: '🇮🇳' },
-  { name: 'Thai',       flag: '🇹🇭' },
-  { name: 'Turkish',    flag: '🇹🇷' },
-  { name: 'Ukrainian',  flag: '🇺🇦' },
-  { name: 'Urdu',       flag: '🇵🇰' },
-  { name: 'Vietnamese', flag: '🇻🇳' },
-  { name: 'Yoruba',     flag: '🇳🇬' },
+  'English', 'Spanish', 'French', 'German', 'Swedish',
+  'Japanese', 'Mandarin', 'Korean', 'Italian', 'Portuguese',
 ];
 
 type ModalTarget = 'learn' | 'native';
 
 export function HomeScreen({ navigation }: Props) {
-  const [learnLang, setLearnLang] = useState(LANGUAGES.find((l) => l.name === 'English')!);
-  const [nativeLang, setNativeLang] = useState(LANGUAGES.find((l) => l.name === 'English')!);
+  const [learnLang, setLearnLang] = useState('English');
+  const [nativeLang, setNativeLang] = useState('English');
   const [modalTarget, setModalTarget] = useState<ModalTarget>('learn');
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -87,7 +32,7 @@ export function HomeScreen({ navigation }: Props) {
   const active = modalTarget === 'learn' ? learnLang : nativeLang;
 
   const filtered = search.trim()
-    ? LANGUAGES.filter((l) => l.name.toLowerCase().includes(search.toLowerCase()))
+    ? LANGUAGES.filter((l) => l.toLowerCase().includes(search.toLowerCase()))
     : LANGUAGES;
 
   function openModal(target: ModalTarget) {
@@ -96,7 +41,7 @@ export function HomeScreen({ navigation }: Props) {
     setModalOpen(true);
   }
 
-  function pick(lang: typeof LANGUAGES[0]) {
+  function pick(lang: string) {
     if (modalTarget === 'learn') setLearnLang(lang);
     else setNativeLang(lang);
     setModalOpen(false);
@@ -107,31 +52,29 @@ export function HomeScreen({ navigation }: Props) {
     <View style={styles.container}>
       <View style={styles.top}>
         <Text style={styles.appName}>Talkos</Text>
-        <Text style={styles.subtitle}>Pick a language and start talking</Text>
+        <Text style={styles.subtitle}>AI language partner — speak to learn</Text>
       </View>
 
       <View style={styles.middle}>
-        <Text style={styles.label}>I want to practice</Text>
+        <Text style={styles.label}>I WANT TO PRACTICE</Text>
         <TouchableOpacity style={styles.dropdown} onPress={() => openModal('learn')} activeOpacity={0.8}>
-          <Text style={styles.dropdownFlag}>{learnLang.flag}</Text>
-          <Text style={styles.dropdownText}>{learnLang.name}</Text>
+          <Text style={styles.dropdownText}>{learnLang}</Text>
           <Text style={styles.dropdownChevron}>›</Text>
         </TouchableOpacity>
 
-        <Text style={[styles.label, { marginTop: 8 }]}>I speak</Text>
+        <Text style={[styles.label, { marginTop: 8 }]}>I SPEAK</Text>
         <TouchableOpacity style={styles.dropdown} onPress={() => openModal('native')} activeOpacity={0.8}>
-          <Text style={styles.dropdownFlag}>{nativeLang.flag}</Text>
-          <Text style={styles.dropdownText}>{nativeLang.name}</Text>
+          <Text style={styles.dropdownText}>{nativeLang}</Text>
           <Text style={styles.dropdownChevron}>›</Text>
         </TouchableOpacity>
       </View>
 
       <TouchableOpacity
         style={styles.startBtn}
-        onPress={() => navigation.navigate('Conversation', { language: learnLang.name, nativeLanguage: nativeLang.name })}
+        onPress={() => navigation.navigate('Conversation', { language: learnLang, nativeLanguage: nativeLang })}
         activeOpacity={0.85}
       >
-        <Text style={styles.startBtnText}>Start Talking</Text>
+        <Text style={styles.startBtnText}>Start</Text>
       </TouchableOpacity>
 
       <Modal visible={modalOpen} animationType="slide" presentationStyle="pageSheet">
@@ -158,18 +101,17 @@ export function HomeScreen({ navigation }: Props) {
 
           <FlatList
             data={filtered}
-            keyExtractor={(l) => l.name}
+            keyExtractor={(l) => l}
             keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <TouchableOpacity
-                style={[styles.row, item.name === active.name && styles.rowActive]}
+                style={[styles.row, item === active && styles.rowActive]}
                 onPress={() => pick(item)}
               >
-                <Text style={styles.rowFlag}>{item.flag}</Text>
-                <Text style={[styles.rowName, item.name === active.name && styles.rowNameActive]}>
-                  {item.name}
+                <Text style={[styles.rowName, item === active && styles.rowNameActive]}>
+                  {item}
                 </Text>
-                {item.name === active.name && <Text style={styles.rowCheck}>✓</Text>}
+                {item === active && <Text style={styles.rowCheck}>✓</Text>}
               </TouchableOpacity>
             )}
           />
@@ -189,31 +131,33 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   top: { alignItems: 'center', gap: 8 },
-  appName: { color: '#e0e0ff', fontSize: 36, fontWeight: '800', letterSpacing: 1 },
-  subtitle: { color: '#8888aa', fontSize: 15 },
+  appName: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#8ba4f8',
+  },
+  subtitle: { color: '#8888aa', fontSize: 14 },
   middle: { gap: 12 },
-  label: { color: '#7c6af7', fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.5 },
+  label: { color: '#8888aa', fontSize: 11, fontWeight: '700', letterSpacing: 1.2 },
   dropdown: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#16213e',
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: '#2a2a4a',
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    gap: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
   },
-  dropdownFlag: { fontSize: 28 },
-  dropdownText: { flex: 1, color: '#e0e0ff', fontSize: 17, fontWeight: '600' },
+  dropdownText: { flex: 1, color: '#e0e0ff', fontSize: 16, fontWeight: '500' },
   dropdownChevron: { color: '#555577', fontSize: 22, fontWeight: '300' },
   startBtn: {
     backgroundColor: '#7c6af7',
     paddingVertical: 18,
-    borderRadius: 32,
+    borderRadius: 20,
     alignItems: 'center',
   },
-  startBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  startBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 
   // Modal
   modal: { flex: 1, backgroundColor: '#1a1a2e' },
@@ -249,7 +193,6 @@ const styles = StyleSheet.create({
     borderBottomColor: '#16213e',
   },
   rowActive: { backgroundColor: '#1e1640' },
-  rowFlag: { fontSize: 24 },
   rowName: { flex: 1, color: '#aaaacc', fontSize: 15 },
   rowNameActive: { color: '#e0e0ff', fontWeight: '600' },
   rowCheck: { color: '#7c6af7', fontSize: 16, fontWeight: '700' },
