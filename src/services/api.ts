@@ -17,6 +17,13 @@ const WS_BASE = `ws://${HOST}:8000/api/v1`;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type WordLookupResult = {
+  explanation: string;
+  example: string;
+  example_translation: string;
+  pronunciation: string | null;
+};
+
 export type SessionSummary = {
   exchanges: number;
   nailed: string[];
@@ -84,6 +91,26 @@ export async function fetchTTSBase64(text: string, speed: number): Promise<strin
   });
 }
 
+export async function fetchWordLookup(
+  word: string,
+  context: string,
+  targetLanguage: string,
+  nativeLanguage: string,
+): Promise<WordLookupResult> {
+  const res = await fetch(`${BASE_URL}/talkos/word-lookup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      word,
+      context,
+      target_language: targetLanguage,
+      native_language: nativeLanguage,
+    }),
+  });
+  if (!res.ok) throw new Error('Word lookup failed');
+  return res.json();
+}
+
 // ─── WebSocket client ─────────────────────────────────────────────────────────
 
 export class TalkosWS {
@@ -132,6 +159,10 @@ export class TalkosWS {
 
   sendSpeech(base64Audio: string) {
     this.ws.send(JSON.stringify({ type: 'speech', data: base64Audio }));
+  }
+
+  sendSetTopic(text: string) {
+    this.ws.send(JSON.stringify({ type: 'set_topic', text }));
   }
 
   endSession() {

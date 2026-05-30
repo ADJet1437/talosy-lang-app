@@ -12,6 +12,8 @@ import { Animated, ActivityIndicator, Alert, ScrollView, StyleSheet, Text, Touch
 
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { TalkosWS, createSession, fetchTTSBase64 } from '../services/api';
+import { TopicSheet } from '../components/TopicSheet';
+import { WordSheet } from '../components/WordSheet';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Conversation'>;
 type AppState = 'setup' | 'connecting' | 'ai_speaking' | 'listening' | 'processing' | 'paused' | 'ended';
@@ -30,6 +32,9 @@ export function ConversationScreen({ navigation, route }: Props) {
   const [suggestion, setSuggestion] = useState('');
   const [suggestionPlaying, setSuggestionPlaying] = useState(false);
   const [suggestionSpeed, setSuggestionSpeed] = useState(1.0);
+  const [activeScene, setActiveScene] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [wordSheet, setWordSheet] = useState<{ word: string; context: string } | null>(null);
 
   const wsRef = useRef<TalkosWS | null>(null);
   const sessionIdRef = useRef<string | null>(null);
@@ -327,6 +332,25 @@ export function ConversationScreen({ navigation, route }: Props) {
     }
   }
 
+  // ─── Topic selection ────────────────────────────────────────────────────────
+
+  function handleSceneSelect(scene: string, category: string) {
+    setSheetOpen(false);
+    setActiveScene(scene);
+
+    // Stop any active recording/VAD before sending
+    isActiveRef.current = false;
+    stopVadPolling();
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+    recorder.stop().catch(() => {});
+    flushStreaming();
+    setSuggestion('');
+    setAppState('processing');
+
+    const text = `Let's focus our conversation on "${scene}" (${category}).`;
+    wsRef.current?.sendSetTopic(text);
+  }
+
   // ─── State config ───────────────────────────────────────────────────────────
 
   const stateConfig: Record<AppState, { color: string; icon: string; spinner: boolean; label: string }> = {
@@ -387,7 +411,21 @@ export function ConversationScreen({ navigation, route }: Props) {
             </View>
           ) : (
             <View key={i} style={styles.aiBubbleWrap}>
-              <Text style={[styles.bubbleText, styles.aiText]}>{m.text}</Text>
+              <View style={styles.aiWordRow}>
+                {m.text.split(' ').filter(Boolean).map((token, wi) => {
+                  const clean = token.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+                  return (
+                    <Text
+                      key={wi}
+                      style={[styles.bubbleText, styles.aiText, clean ? styles.aiWordTappable : undefined]}
+                      onPress={clean ? () => setWordSheet({ word: clean, context: m.text }) : undefined}
+                      suppressHighlighting
+                    >
+                      {token}{' '}
+                    </Text>
+                  );
+                })}
+              </View>
               {m.translation && (
                 <Text style={styles.translationText}>{m.translation}</Text>
               )}
@@ -422,6 +460,15 @@ export function ConversationScreen({ navigation, route }: Props) {
         ) : null}
       </ScrollView>
 
+      {/* Floating topics button */}
+      <TouchableOpacity
+        style={styles.topicsBtn}
+        onPress={() => setSheetOpen(true)}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.topicsBtnText}>💬 Topics</Text>
+      </TouchableOpacity>
+
       {/* Footer */}
       <View style={styles.footer}>
         <TouchableOpacity
@@ -437,6 +484,22 @@ export function ConversationScreen({ navigation, route }: Props) {
           <Text style={styles.roundBtnIcon}>✕</Text>
         </TouchableOpacity>
       </View>
+
+      <TopicSheet
+        visible={sheetOpen}
+        activeScene={activeScene}
+        onClose={() => setSheetOpen(false)}
+        onSelect={handleSceneSelect}
+      />
+
+      <WordSheet
+        visible={wordSheet !== null}
+        word={wordSheet?.word ?? ''}
+        context={wordSheet?.context ?? ''}
+        targetLanguage={language}
+        nativeLanguage={nativeLanguage}
+        onClose={() => setWordSheet(null)}
+      />
     </View>
   );
 }
@@ -479,9 +542,11 @@ const styles = StyleSheet.create({
   bubble: { maxWidth: '80%', borderRadius: 16, padding: 12 },
   userBubble: { alignSelf: 'flex-end', backgroundColor: '#7c6af7' },
   aiBubbleWrap: { alignSelf: 'flex-start', maxWidth: '85%', gap: 4 },
+  aiWordRow: { flexDirection: 'row', flexWrap: 'wrap' },
   bubbleText: { fontSize: 15, lineHeight: 22 },
   userText: { color: '#fff' },
   aiText: { color: '#e0e0ff' },
+  aiWordTappable: { textDecorationLine: 'underline', textDecorationColor: '#3a3a6a' },
   translationText: { color: '#6a6a9a', fontSize: 12, lineHeight: 18 },
 
   suggestionWrap: { alignSelf: 'flex-end', alignItems: 'flex-end', gap: 4, marginTop: 4 },
@@ -505,6 +570,23 @@ const styles = StyleSheet.create({
   suggestionSpeedBtn: { padding: 4 },
   suggestionSpeedText: { color: '#5a4aaa', fontSize: 12, fontWeight: '700' },
   suggestionSpeedTextActive: { color: '#a89af7' },
+
+  topicsBtn: {
+    position: 'absolute',
+    bottom: 120,
+    right: 16,
+    backgroundColor: '#1e1e3e',
+    borderWidth: 1.5,
+    borderColor: '#7c6af7',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  topicsBtnText: {
+    color: '#a89af7',
+    fontSize: 13,
+    fontWeight: '600',
+  },
 
   footer: {
     flexDirection: 'row',
