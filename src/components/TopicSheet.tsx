@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 
 import { TOPICS } from '../data/topics';
+import { C } from '../theme';
 
 type Props = {
   visible: boolean;
@@ -22,8 +23,8 @@ type Props = {
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SHEET_HEIGHT = Dimensions.get('window').height * 0.55;
 const CARD_PADDING = 16;
-const CARD_GAP = 10;
-const CARD_SIZE = (SCREEN_WIDTH - CARD_PADDING * 2 - CARD_GAP * 2) / 3;
+const CARD_GAP     = 10;
+const CARD_SIZE    = (SCREEN_WIDTH - CARD_PADDING * 2 - CARD_GAP * 2) / 3;
 
 export function TopicSheet({ visible, activeScene, onClose, onSelect }: Props) {
   const [activeCategory, setActiveCategory] = useState(TOPICS[0].name);
@@ -32,16 +33,11 @@ export function TopicSheet({ visible, activeScene, onClose, onSelect }: Props) {
   useEffect(() => {
     if (visible) {
       Animated.spring(slideAnim, {
-        toValue: 0,
-        tension: 65,
-        friction: 11,
-        useNativeDriver: true,
+        toValue: 0, tension: 65, friction: 11, useNativeDriver: true,
       }).start();
     } else {
       Animated.timing(slideAnim, {
-        toValue: SHEET_HEIGHT,
-        duration: 220,
-        useNativeDriver: true,
+        toValue: SHEET_HEIGHT, duration: 220, useNativeDriver: true,
       }).start();
     }
   }, [visible]);
@@ -54,7 +50,6 @@ export function TopicSheet({ visible, activeScene, onClose, onSelect }: Props) {
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
 
         <Animated.View style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}>
-          {/* Category tabs */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -78,7 +73,6 @@ export function TopicSheet({ visible, activeScene, onClose, onSelect }: Props) {
             })}
           </ScrollView>
 
-          {/* Scene cards grid */}
           <ScrollView
             style={styles.scenesScroll}
             contentContainerStyle={styles.scenesContent}
@@ -110,91 +104,39 @@ export function TopicSheet({ visible, activeScene, onClose, onSelect }: Props) {
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
+  overlay:  { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
+
   sheet: {
     height: SHEET_HEIGHT,
-    backgroundColor: '#f5f5f7',
+    backgroundColor: C.BG_SURFACE,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     overflow: 'hidden',
   },
 
-  // Category tabs — 10% of sheet height
-  tabsRow: {
-    height: SHEET_HEIGHT * 0.1,
-  },
-  tabsContent: {
-    paddingHorizontal: 12,
-    gap: 6,
-    alignItems: 'center',
-  },
-  tab: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 20,
-    backgroundColor: '#ebebf0',
-  },
-  tabActive: {
-    backgroundColor: '#1a1a2e',
-  },
-  tabText: {
-    color: '#666680',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  tabTextActive: {
-    color: '#fff',
-  },
+  tabsRow:     { height: SHEET_HEIGHT * 0.1 },
+  tabsContent: { paddingHorizontal: 12, gap: 6, alignItems: 'center' },
 
-  // Scene grid
-  scenesScroll: {
-    height: SHEET_HEIGHT * 0.9,
-  },
-  scenesContent: {
-    padding: CARD_PADDING,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: CARD_GAP,
-  },
+  tab:          { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, backgroundColor: C.BG_ELEVATED },
+  tabActive:    { backgroundColor: C.TEXT_PRIMARY },
+  tabText:      { color: C.TEXT_SECONDARY, fontSize: 12, fontWeight: '600' },
+  tabTextActive:{ color: C.BG_BASE },
 
-  // Square cards
+  scenesScroll:  { height: SHEET_HEIGHT * 0.9 },
+  scenesContent: { padding: CARD_PADDING },
+  grid:          { flexDirection: 'row', flexWrap: 'wrap', gap: CARD_GAP },
+
   card: {
-    width: CARD_SIZE,
-    height: CARD_SIZE,
+    width: CARD_SIZE, height: CARD_SIZE,
     borderRadius: 16,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#e0e0ea',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 8,
+    backgroundColor: C.BG_ELEVATED,
+    borderWidth: 1.5, borderColor: C.BORDER_DEFAULT,
+    alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingHorizontal: 8,
   },
-  cardSelected: {
-    backgroundColor: '#2563eb',
-    borderColor: '#2563eb',
-  },
-  cardIcon: {
-    fontSize: 28,
-  },
-  cardLabel: {
-    color: '#666680',
-    fontSize: 11,
-    fontWeight: '500',
-    textAlign: 'center',
-    lineHeight: 15,
-  },
-  cardLabelSelected: {
-    color: '#fff',
-    fontWeight: '700',
-  },
+  cardSelected:      { backgroundColor: C.BLUE, borderColor: C.BLUE },
+  cardIcon:          { fontSize: 28 },
+  cardLabel:         { color: C.TEXT_SECONDARY, fontSize: 11, fontWeight: '500', textAlign: 'center', lineHeight: 15 },
+  cardLabelSelected: { color: C.TEXT_ON_COLOR, fontWeight: '700' },
 });

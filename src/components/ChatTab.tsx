@@ -9,6 +9,8 @@ import {
   View,
 } from 'react-native';
 
+import { C } from '../theme';
+
 export type AppState =
   | 'setup' | 'connecting' | 'ai_speaking'
   | 'listening' | 'processing' | 'paused' | 'ended';
@@ -36,13 +38,13 @@ type Props = {
 };
 
 const STATE_CONFIG: Record<AppState, { color: string; icon: string; spinner: boolean; label: string }> = {
-  setup:       { color: '#c8c8d8', icon: '',   spinner: true,  label: 'Starting…' },
-  connecting:  { color: '#c8c8d8', icon: '',   spinner: true,  label: 'Connecting…' },
-  ai_speaking: { color: '#44aa88', icon: '🔊', spinner: false, label: 'Speaking…' },
-  listening:   { color: '#7c6af7', icon: '🎙', spinner: false, label: 'Listening…' },
-  processing:  { color: '#f0a040', icon: '',   spinner: true,  label: 'Processing…' },
-  paused:      { color: '#8888a0', icon: '🎙', spinner: false, label: 'Ready' },
-  ended:       { color: '#c8c8d8', icon: '✓',  spinner: false, label: 'Ended' },
+  setup:       { color: C.TEXT_MUTED,  icon: '',   spinner: true,  label: 'Starting…' },
+  connecting:  { color: C.TEXT_MUTED,  icon: '',   spinner: true,  label: 'Connecting…' },
+  ai_speaking: { color: C.GREEN,       icon: '🔊', spinner: false, label: 'Speaking…' },
+  listening:   { color: C.PURPLE,      icon: '🎙', spinner: false, label: 'Listening…' },
+  processing:  { color: C.ORANGE,      icon: '',   spinner: true,  label: 'Processing…' },
+  paused:      { color: C.TEXT_MUTED,  icon: '🎙', spinner: false, label: 'Ready' },
+  ended:       { color: C.TEXT_MUTED,  icon: '✓',  spinner: false, label: 'Ended' },
 };
 
 export function ChatTab({
@@ -104,7 +106,7 @@ export function ChatTab({
           />
           <View style={[styles.indicatorCircle, { backgroundColor: cfg.color }]}>
             {cfg.spinner
-              ? <ActivityIndicator color="#7c6af7" size="small" />
+              ? <ActivityIndicator color={C.PURPLE} size="small" />
               : <Text style={styles.indicatorIcon}>{cfg.icon}</Text>
             }
           </View>
@@ -203,11 +205,7 @@ export function ChatTab({
           </TouchableOpacity>
 
           <View style={styles.plusBtnWrapper}>
-            <TouchableOpacity
-              style={styles.plusBtn}
-              onPress={onPlusToggle}
-              activeOpacity={0.8}
-            >
+            <TouchableOpacity style={styles.plusBtn} onPress={onPlusToggle} activeOpacity={0.8}>
               <Text style={styles.plusBtnText}>+</Text>
             </TouchableOpacity>
           </View>
@@ -226,39 +224,39 @@ const styles = StyleSheet.create({
   glowRing:         { position: 'absolute', width: 64, height: 64, borderRadius: 32, opacity: 0.18 },
   indicatorCircle:  { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
   indicatorIcon:    { fontSize: 24 },
-  indicatorLabel:   { color: '#444460', fontSize: 14, fontWeight: '600', letterSpacing: 0.3 },
+  indicatorLabel:   { color: C.TEXT_SECONDARY, fontSize: 14, fontWeight: '600', letterSpacing: 0.3 },
 
   transcript:        { flex: 1 },
   transcriptContent: { padding: 16, gap: 10, paddingBottom: 16 },
   bubble:            { maxWidth: '80%', borderRadius: 16, padding: 12 },
-  userBubble:        { alignSelf: 'flex-end', backgroundColor: '#2563eb' },
+  userBubble:        { alignSelf: 'flex-end', backgroundColor: C.BLUE },
   aiBubbleWrap:      { alignSelf: 'flex-start', maxWidth: '85%', gap: 6 },
-  aiBubble:          { backgroundColor: '#dcdce4', borderRadius: 16, padding: 12 },
+  aiBubble:          { backgroundColor: C.BG_ELEVATED, borderRadius: 16, padding: 12 },
   aiWordRow:         { flexDirection: 'row', flexWrap: 'wrap' },
   bubbleText:        { fontSize: 15, lineHeight: 22 },
-  userText:          { color: '#fff' },
-  aiText:            { color: '#1a1a2e' },
-  aiWordTappable:    { textDecorationLine: 'underline', textDecorationColor: '#c8c8dc' },
-  translationText:   { color: '#9999b0', fontSize: 12, lineHeight: 18, fontStyle: 'italic', paddingHorizontal: 4 },
+  userText:          { color: C.TEXT_ON_COLOR },
+  aiText:            { color: C.TEXT_PRIMARY },
+  aiWordTappable:    { textDecorationLine: 'underline', textDecorationColor: C.BORDER_STRONG },
+  translationText:   { color: C.TEXT_MUTED, fontSize: 12, lineHeight: 18, fontStyle: 'italic', paddingHorizontal: 4 },
 
   suggestionWrap:  { alignSelf: 'flex-end', alignItems: 'flex-end', gap: 4, marginTop: 4 },
-  suggestionLabel: { color: '#9999b0', fontSize: 11 },
+  suggestionLabel: { color: C.TEXT_MUTED, fontSize: 11 },
   suggestionBox: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#f0eeff', borderRadius: 16,
-    borderWidth: 1, borderColor: '#c0b0f0', borderStyle: 'dashed',
+    backgroundColor: C.BG_ELEVATED, borderRadius: 16,
+    borderWidth: 1, borderColor: C.PURPLE, borderStyle: 'dashed',
     paddingHorizontal: 14, paddingVertical: 8, gap: 8,
   },
-  suggestionText:           { color: '#7c6af7', fontSize: 14, flex: 1 },
-  suggestionPlayBtn:        { padding: 4 },
-  suggestionPlayIcon:       { color: '#b0a0f0', fontSize: 14 },
-  suggestionPlayIconActive: { color: '#7c6af7' },
-  suggestionSpeedBtn:       { padding: 4 },
-  suggestionSpeedText:      { color: '#b0a0f0', fontSize: 12, fontWeight: '700' },
-  suggestionSpeedTextActive:{ color: '#7c6af7' },
+  suggestionText:            { color: C.PURPLE, fontSize: 14, flex: 1 },
+  suggestionPlayBtn:         { padding: 4 },
+  suggestionPlayIcon:        { color: C.TEXT_MUTED, fontSize: 14 },
+  suggestionPlayIconActive:  { color: C.PURPLE },
+  suggestionSpeedBtn:        { padding: 4 },
+  suggestionSpeedText:       { color: C.TEXT_MUTED, fontSize: 12, fontWeight: '700' },
+  suggestionSpeedTextActive: { color: C.PURPLE },
 
   inputSection: {
-    borderTopWidth: 1, borderTopColor: '#e0e0ea',
+    borderTopWidth: 1, borderTopColor: C.BORDER_DEFAULT,
     paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12,
   },
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -266,24 +264,24 @@ const styles = StyleSheet.create({
   inputBar: {
     flex: 1, height: 48,
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: '#f5f5f7',
-    borderRadius: 24, borderWidth: 1.5, borderColor: '#d8d8e8',
+    backgroundColor: C.BG_ELEVATED,
+    borderRadius: 24, borderWidth: 1.5, borderColor: C.BORDER_DEFAULT,
     paddingHorizontal: 18,
   },
   inputBarDisabled:     { opacity: 0.45 },
   inputBarIcon:         { fontSize: 18 },
   inputBarIconDisabled: { opacity: 0.5 },
-  inputBarText:         { color: '#666680', fontSize: 15 },
-  inputBarTextDisabled: { color: '#b0b0c0' },
+  inputBarText:         { color: C.TEXT_SECONDARY, fontSize: 15 },
+  inputBarTextDisabled: { color: C.TEXT_MUTED },
 
   plusBtnWrapper: { position: 'relative' },
   plusBtn: {
     width: 48, height: 48, borderRadius: 24,
-    backgroundColor: '#7c6af7',
+    backgroundColor: C.PURPLE,
     alignItems: 'center', justifyContent: 'center',
   },
-  plusBtnText: { color: '#fff', fontSize: 24, fontWeight: '300', lineHeight: 28, marginTop: -2 },
+  plusBtnText: { color: C.TEXT_ON_COLOR, fontSize: 24, fontWeight: '300', lineHeight: 28, marginTop: -2 },
 
   equalizerRow: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 2 },
-  equalizerBar: { flex: 1, borderRadius: 1.5, backgroundColor: '#7c6af7' },
+  equalizerBar: { flex: 1, borderRadius: 1.5, backgroundColor: C.PURPLE },
 });

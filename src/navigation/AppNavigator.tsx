@@ -2,6 +2,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
 
 import { MainScreen } from '../screens/MainScreen';
+import { C } from '../theme';
 
 export type RootStackParamList = {
   Main: undefined;
@@ -10,12 +11,12 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const screenOptions = {
-  headerStyle: { backgroundColor: '#f5f5f7' },
-  headerTintColor: '#7c6af7',
-  headerTitleStyle: { fontWeight: '600' as const, color: '#1a1a2e' },
+  headerStyle:           { backgroundColor: C.BG_SURFACE },
+  headerTintColor:       C.PURPLE,
+  headerTitleStyle:      { fontWeight: '600' as const, color: C.TEXT_PRIMARY },
   headerBackTitleVisible: false,
-  headerBackTitle: '',
-  contentStyle: { backgroundColor: '#f5f5f7' },
+  headerBackTitle:       '',
+  contentStyle:          { backgroundColor: C.BG_BASE },
 };
 
 export function AppNavigator() {

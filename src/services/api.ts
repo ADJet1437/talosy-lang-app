@@ -48,12 +48,6 @@ export type WordLookupResult = {
   pronunciation: string | null;
 };
 
-export type SessionSummary = {
-  exchanges: number;
-  nailed: string[];
-  nailed_type: 'sentences' | 'words';
-  covered_topics: string[];
-};
 
 export type WSIncoming =
   | { type: 'ready' }
@@ -86,15 +80,6 @@ export async function createSession(language: string, nativeLanguage: string): P
   return data.session_id;
 }
 
-export async function fetchReview(sessionId: string): Promise<SessionSummary | null> {
-  try {
-    const res = await fetch(`${BASE_URL}/talkos/sessions/${sessionId}/review`);
-    if (res.ok) return res.json();
-    return null;
-  } catch {
-    return null;
-  }
-}
 
 export async function fetchTTSBase64(text: string, speed: number): Promise<string> {
   const res = await fetch(`${BASE_URL}/talkos/tts`, {

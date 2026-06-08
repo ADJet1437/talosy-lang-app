@@ -21,23 +21,37 @@ import {
 } from 'react-native';
 
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { LessonDetail, SessionSummary, TalkosWS, createSession, fetchReview, fetchTTSBase64 } from '../services/api';
+import { C } from '../theme';
+import { LessonDetail, TalkosWS, createSession, fetchTTSBase64 } from '../services/api';
 import { ChatTab, AppState, Message } from '../components/ChatTab';
-import { MeTab } from '../components/MeTab';
+import { ProfileTab } from '../components/ProfileTab';
 import { LessonsScreen } from './LessonsScreen';
 import { ChapterListComponent } from '../components/ChapterListComponent';
 import { TopicSheet } from '../components/TopicSheet';
 import { WordSheet } from '../components/WordSheet';
-import { ReviewSheet } from '../components/ReviewSheet';
+import { StreakSheet } from '../components/StreakSheet';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Main'>;
 type ActiveTab = 'chat' | 'lessons' | 'me';
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
+const LANG_FLAG: Record<string, string> = {
+  English:    '🇺🇸',
+  Spanish:    '🇪🇸',
+  French:     '🇫🇷',
+  German:     '🇩🇪',
+  Japanese:   '🇯🇵',
+  Mandarin:   '🇨🇳',
+  Korean:     '🇰🇷',
+  Italian:    '🇮🇹',
+  Portuguese: '🇧🇷',
+  Swedish:    '🇸🇪',
+};
+
 const TABS: { key: ActiveTab; icon: IoniconName; iconActive: IoniconName; label: string }[] = [
   { key: 'chat',    icon: 'chatbubble-outline',  iconActive: 'chatbubble',  label: 'Chat' },
   { key: 'lessons', icon: 'book-outline',         iconActive: 'book',        label: 'Lessons' },
-  { key: 'me',      icon: 'person-outline',       iconActive: 'person',      label: 'Me' },
+  { key: 'me',      icon: 'person-outline',       iconActive: 'person',      label: 'Profile' },
 ];
 
 const SPEECH_THRESHOLD     = -25;
@@ -66,10 +80,8 @@ export function MainScreen({ navigation }: Props) {
   const [isImmersive, setIsImmersive]             = useState(false);
   const [isManualRecording, setIsManualRecording] = useState(false);
   const [plusMenuOpen, setPlusMenuOpen]           = useState(false);
-  const [reviewOpen, setReviewOpen]               = useState(false);
-  const [reviewLoading, setReviewLoading]         = useState(false);
-  const [reviewData, setReviewData]               = useState<SessionSummary | null>(null);
   const [openLesson, setOpenLesson]               = useState<LessonDetail | null>(null);
+  const [streakOpen, setStreakOpen]               = useState(false);
 
   // ─── Refs ─────────────────────────────────────────────────────────────────
   const wsRef                = useRef<TalkosWS | null>(null);
@@ -399,21 +411,6 @@ export function MainScreen({ navigation }: Props) {
     }
   }
 
-  // ─── Review ───────────────────────────────────────────────────────────────
-
-  async function handleReview() {
-    if (!sessionIdRef.current) return;
-    setReviewData(null);
-    setReviewLoading(true);
-    setReviewOpen(true);
-    try {
-      const summary = await fetchReview(sessionIdRef.current);
-      setReviewData(summary);
-    } finally {
-      setReviewLoading(false);
-    }
-  }
-
   // ─── Topic selection ──────────────────────────────────────────────────────
 
   function handleSceneSelect(scene: string, category: string) {
@@ -459,7 +456,7 @@ export function MainScreen({ navigation }: Props) {
   if (appState === 'setup') {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color="#7c6af7" size="large" />
+        <ActivityIndicator color={C.PURPLE} size="large" />
       </View>
     );
   }
@@ -469,20 +466,23 @@ export function MainScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
 
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Talkos</Text>
+      {/* Header — hidden on Profile tab which has its own */}
+      {activeTab !== 'me' && (
+        <View style={styles.header}>
           <View style={styles.headerLangTag}>
+            <Text style={styles.headerLangFlag}>{LANG_FLAG[language] ?? '🌐'}</Text>
             <Text style={styles.headerLangText}>{language}</Text>
           </View>
-        </View>
-        {activeTab === 'chat' && (
-          <TouchableOpacity onPress={handleReview} style={styles.headerEndBtn} activeOpacity={0.7}>
-            <Text style={styles.headerEndText}>Review</Text>
+          <TouchableOpacity
+            style={styles.streakPill}
+            onPress={() => setStreakOpen(true)}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.streakFlame}>🔥</Text>
+            <Text style={styles.streakCount}>7</Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      )}
 
       {/* Tab content */}
       <View style={[styles.tabContent, activeTab !== 'chat' && styles.tabHidden]}>
@@ -514,7 +514,7 @@ export function MainScreen({ navigation }: Props) {
       </View>
 
       <View style={[styles.tabContent, activeTab !== 'me' && styles.tabHidden]}>
-        <MeTab
+        <ProfileTab
           isImmersive={isImmersive}
           learnLang={language}
           nativeLang={nativeLanguage}
@@ -540,7 +540,7 @@ export function MainScreen({ navigation }: Props) {
               <Ionicons
                 name={active ? tab.iconActive : tab.icon}
                 size={22}
-                color={active ? '#1a1a2e' : '#9999b0'}
+                color={active ? C.TEXT_PRIMARY : C.TEXT_MUTED}
               />
               <Text style={[styles.tabBarLabel, active && styles.tabBarLabelActive]}>{tab.label}</Text>
             </TouchableOpacity>
@@ -595,11 +595,9 @@ export function MainScreen({ navigation }: Props) {
         nativeLanguage={nativeLanguage}
         onClose={() => setWordSheet(null)}
       />
-      <ReviewSheet
-        visible={reviewOpen}
-        loading={reviewLoading}
-        summary={reviewData}
-        onClose={() => setReviewOpen(false)}
+      <StreakSheet
+        visible={streakOpen}
+        onClose={() => setStreakOpen(false)}
       />
 
     </View>
@@ -607,33 +605,43 @@ export function MainScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  center:    { flex: 1, backgroundColor: '#f5f5f7', alignItems: 'center', justifyContent: 'center' },
-  container: { flex: 1, backgroundColor: '#f5f5f7' },
+  center:    { flex: 1, backgroundColor: C.BG_BASE, alignItems: 'center', justifyContent: 'center' },
+  container: { flex: 1, backgroundColor: C.BG_BASE },
 
   header: {
-    flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: '#e0e0ea',
+    borderBottomWidth: 1, borderBottomColor: C.BORDER_DEFAULT,
+    backgroundColor: C.BG_SURFACE,
   },
-  headerCenter:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 },
-  headerTitle:    { color: '#1a1a2e', fontSize: 16, fontWeight: '700' },
-  headerLangTag:  { backgroundColor: '#ebebf0', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
-  headerLangText: { color: '#666680', fontSize: 12 },
-  headerEndBtn:   { padding: 4 },
-  headerEndText:  { color: '#7c6af7', fontSize: 14, fontWeight: '600' },
+  headerLangTag:  {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: C.BG_ELEVATED,
+    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6,
+  },
+  headerLangFlag: { fontSize: 18 },
+  headerLangText: { color: C.TEXT_SECONDARY, fontSize: 13, fontWeight: '600' },
+
+  streakPill:  {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#2a1500',
+    borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5,
+  },
+  streakFlame: { fontSize: 14 },
+  streakCount: { color: '#f59e0b', fontSize: 13, fontWeight: '800' },
 
   tabContent: { flex: 1 },
   tabHidden:  { display: 'none' },
 
   tabBar: {
     flexDirection: 'row',
-    borderTopWidth: 1, borderTopColor: '#e0e0ea',
-    backgroundColor: '#ffffff',
+    borderTopWidth: 1, borderTopColor: C.BORDER_DEFAULT,
+    backgroundColor: C.BG_SURFACE,
     paddingBottom: 24, paddingTop: 10,
   },
   tabBarItem:        { flex: 1, alignItems: 'center', gap: 3 },
-  tabBarLabel:       { fontSize: 11, fontWeight: '600', color: '#9999b0' },
-  tabBarLabelActive: { color: '#1a1a2e' },
+  tabBarLabel:       { fontSize: 11, fontWeight: '600', color: C.TEXT_MUTED },
+  tabBarLabelActive: { color: C.TEXT_PRIMARY },
 
   plusOverlay: { ...StyleSheet.absoluteFillObject },
   plusMenuFloating: {
@@ -641,11 +649,11 @@ const styles = StyleSheet.create({
     bottom: 137,
     right: 16,
     width: 190,
-    backgroundColor: '#ffffff',
+    backgroundColor: C.BG_ELEVATED,
     borderRadius: 14,
-    borderWidth: 1, borderColor: '#e0e0ea',
+    borderWidth: 1, borderColor: C.BORDER_DEFAULT,
     overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12,
     elevation: 10,
   },
   plusMenuItem: {
@@ -653,6 +661,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 14,
   },
   plusMenuIcon:    { fontSize: 18 },
-  plusMenuText:    { color: '#1a1a2e', fontSize: 14, fontWeight: '500' },
-  plusMenuDivider: { height: 1, backgroundColor: '#e0e0ea', marginHorizontal: 12 },
+  plusMenuText:    { color: C.TEXT_PRIMARY, fontSize: 14, fontWeight: '500' },
+  plusMenuDivider: { height: 1, backgroundColor: C.BORDER_DEFAULT, marginHorizontal: 12 },
 });

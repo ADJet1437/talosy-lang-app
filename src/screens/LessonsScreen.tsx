@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -15,12 +15,32 @@ import {
   fetchLessonCategories,
   fetchLessonDetail,
 } from '../services/api';
+import { LessonNode, NodePosition, NodeState } from '../components/LessonNode';
+import { C } from '../theme';
 
 type Props = {
   onOpenLesson: (lesson: LessonDetail) => void;
 };
 
-const CARD_BG = '#edf7f2';
+const POSITIONS: NodePosition[] = ['center', 'left', 'right'];
+
+const BANNER_COLOR: Record<string, string> = {
+  'Daily Life':    C.BANNER_DAILY,
+  'Travel':        C.BANNER_TRAVEL,
+  'Work & Study':  C.BANNER_WORK,
+  'Food & Drink':  C.BANNER_FOOD,
+  'Entertainment': C.BANNER_ENTERTAIN,
+  'Culture':       C.BANNER_CULTURE,
+};
+
+const BANNER_EMOJI: Record<string, string> = {
+  'Daily Life':    '🌅',
+  'Travel':        '✈️',
+  'Work & Study':  '💼',
+  'Food & Drink':  '🍽️',
+  'Entertainment': '🎬',
+  'Culture':       '🏮',
+};
 
 function seededRandom(seed: string): number {
   let h = 0;
@@ -28,13 +48,22 @@ function seededRandom(seed: string): number {
   return Math.abs(h) / 2147483647;
 }
 
+function fakeState(lesson: LessonSummary): { state: NodeState; dots: number } {
+  const r = seededRandom(lesson.id);
+  if (r > 0.65) return { state: 'done',   dots: 5 };
+  if (r > 0.30) return { state: 'active', dots: Math.max(1, Math.floor(seededRandom(lesson.id + 'd') * 4)) };
+  return               { state: 'todo',   dots: 0 };
+}
+
 export function LessonsScreen({ onOpenLesson }: Props) {
-  const [categories, setCategories]               = useState<LessonCategory[]>([]);
-  const [activeCategoryId, setActiveCategoryId]   = useState<string | null>(null);
+  const [categories,        setCategories]        = useState<LessonCategory[]>([]);
+  const [activeCategoryId,  setActiveCategoryId]  = useState<string | null>(null);
   const [loadingCategories, setLoadingCategories] = useState(true);
-  const [error, setError]                         = useState<string | null>(null);
-  const [starting, setStarting]                   = useState<string | null>(null);
+  const [error,             setError]             = useState<string | null>(null);
+  const [starting,          setStarting]          = useState<string | null>(null);
   const isStartingRef = useRef(false);
+  const scrollRef     = useRef<ScrollView>(null);
+  const sectionYs     = useRef<Record<string, number>>({});
 
   useEffect(() => {
     fetchLessonCategories()
@@ -46,6 +75,12 @@ export function LessonsScreen({ onOpenLesson }: Props) {
       .finally(() => setLoadingCategories(false));
   }, []);
 
+  function handleTabPress(catId: string) {
+    setActiveCategoryId(catId);
+    const y = sectionYs.current[catId];
+    if (y !== undefined) scrollRef.current?.scrollTo({ y, animated: true });
+  }
+
   async function handlePlay(lesson: LessonSummary) {
     if (isStartingRef.current) return;
     isStartingRef.current = true;
@@ -54,36 +89,25 @@ export function LessonsScreen({ onOpenLesson }: Props) {
       const detail = await fetchLessonDetail(lesson.id);
       onOpenLesson(detail);
     } catch {
-      // silently fail — user can retry
+      // silent — user can retry
     } finally {
       setStarting(null);
       isStartingRef.current = false;
     }
   }
 
-  const currentLessons =
-    categories.find((c) => c.id === activeCategoryId)?.lessons ?? [];
-
   if (loadingCategories) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator color="#2563eb" size="large" />
-      </View>
-    );
+    return <View style={styles.center}><ActivityIndicator color={C.BLUE} size="large" /></View>;
   }
 
   if (error) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>{error}</Text>
-      </View>
-    );
+    return <View style={styles.center}><Text style={styles.errorText}>{error}</Text></View>;
   }
 
   return (
     <View style={styles.container}>
 
-      {/* Category tabs */}
+      {/* ── Category jump tabs ──────────────────────────────────────────────── */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -96,169 +120,134 @@ export function LessonsScreen({ onOpenLesson }: Props) {
             <TouchableOpacity
               key={cat.id}
               style={[styles.tab, active && styles.tabActive]}
-              onPress={() => setActiveCategoryId(cat.id)}
+              onPress={() => handleTabPress(cat.id)}
               activeOpacity={0.7}
             >
               <Text style={[styles.tabText, active && styles.tabTextActive]}>
-                {cat.name}
+                {BANNER_EMOJI[cat.name] ?? '📚'} {cat.name}
               </Text>
             </TouchableOpacity>
           );
         })}
       </ScrollView>
 
-      {/* Lesson cards */}
+      {/* ── Path canvas ─────────────────────────────────────────────────────── */}
       <ScrollView
-        style={styles.lessonList}
-        contentContainerStyle={styles.listContent}
+        ref={scrollRef}
+        style={styles.canvas}
+        contentContainerStyle={styles.canvasContent}
         showsVerticalScrollIndicator={false}
       >
-        {currentLessons.map((lesson) => {
-          const total     = Math.floor(seededRandom(lesson.id + 't') * 40) + 10;
-          const completed = Math.floor(seededRandom(lesson.id + 'c') * (total + 1));
-          const pct       = total > 0 ? completed / total : 0;
-
-          return (
-            <View
-              key={lesson.id}
-              style={[styles.card, { backgroundColor: CARD_BG }]}
-            >
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle} numberOfLines={1}>{lesson.title}</Text>
-                <View style={[
-                  styles.badge,
-                  lesson.difficulty === 'beginner' ? styles.badgeBeginner : styles.badgeIntermediate,
-                ]}>
-                  <Text style={[
-                    styles.badgeText,
-                    lesson.difficulty === 'beginner' ? styles.badgeBeginnerText : styles.badgeIntermediateText,
-                  ]}>
-                    {lesson.difficulty}
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.cardDescription}>{lesson.description}</Text>
-
-              <View style={styles.cardFooter}>
-                <Text style={styles.progressText}>{completed}/{total}</Text>
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${pct * 100}%` }]} />
-                </View>
-                <TouchableOpacity
-                  style={styles.playBtn}
-                  onPress={() => handlePlay(lesson)}
-                  disabled={starting !== null}
-                  activeOpacity={0.8}
-                >
-                  {starting === lesson.id
-                    ? <ActivityIndicator color="#fff" size="small" />
-                    : <Text style={styles.playBtnText}>▶</Text>
-                  }
-                </TouchableOpacity>
-              </View>
-
+        {categories.map((cat) => (
+          <View
+            key={cat.id}
+            onLayout={(e) => { sectionYs.current[cat.id] = e.nativeEvent.layout.y; }}
+          >
+            {/* Category banner */}
+            <View style={[styles.banner, { backgroundColor: BANNER_COLOR[cat.name] ?? C.BG_ELEVATED }]}>
+              <Text style={styles.bannerEmoji}>{BANNER_EMOJI[cat.name] ?? '📚'}</Text>
+              <Text style={styles.bannerName}>{cat.name}</Text>
             </View>
-          );
-        })}
+
+            {/* Lesson nodes */}
+            {cat.lessons.map((lesson, idx) => {
+              const { state, dots } = fakeState(lesson);
+              const position        = POSITIONS[idx % POSITIONS.length];
+              const isLast          = idx === cat.lessons.length - 1;
+
+              return (
+                <View key={lesson.id}>
+                  <LessonNode
+                    lesson={lesson}
+                    index={idx + 1}
+                    position={position}
+                    nodeState={state}
+                    doneDots={dots}
+                    isStarting={starting === lesson.id}
+                    onPress={() => handlePlay(lesson)}
+                  />
+                  {!isLast && <Connector from={position} to={POSITIONS[(idx + 1) % POSITIONS.length]} />}
+                </View>
+              );
+            })}
+
+            <View style={styles.sectionBottom} />
+          </View>
+        ))}
       </ScrollView>
 
     </View>
   );
 }
 
+function Connector({ from, to }: { from: NodePosition; to: NodePosition }) {
+  const offset =
+    from === 'center' && to === 'left'  ? -28 :
+    from === 'center' && to === 'right' ?  28 :
+    from === 'left'   && to === 'center'?  28 :
+    from === 'right'  && to === 'center'? -28 :
+    from === 'left'   && to === 'right' ?  56 :
+    from === 'right'  && to === 'left'  ? -56 : 0;
+
+  const rotate = offset === 0 ? '0deg' : offset > 0 ? '12deg' : '-12deg';
+
+  return (
+    <View style={styles.connectorWrap}>
+      <View style={[styles.connectorLine, { transform: [{ rotate }, { translateX: offset / 2 }] }]}>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <View key={i} style={styles.connectorDot} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: C.BG_BASE },
+  center:    { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  errorText: { color: C.RED, fontSize: 14, textAlign: 'center', lineHeight: 22 },
 
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  errorText: { color: '#e55', fontSize: 14, textAlign: 'center', lineHeight: 22 },
-
-  // ── Category tabs ─────────────────────────────────────────────────────────
+  // ── Tabs ──────────────────────────────────────────────────────────────────
   tabsRow: {
-    flexGrow: 0,
-    flexShrink: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0ea',
+    flexGrow: 0, flexShrink: 0,
+    backgroundColor: C.BG_SURFACE,
+    borderBottomWidth: 1, borderBottomColor: C.BORDER_DEFAULT,
   },
-  tabsContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 8,
-    alignItems: 'center',
-  },
-  tab: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: '#ebebf0',
-  },
-  tabActive:     { backgroundColor: '#1a1a2e' },
-  tabText:       { color: '#666680', fontSize: 13, fontWeight: '600' },
-  tabTextActive: { color: '#fff' },
+  tabsContent:  { paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: 'center' },
+  tab:          { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: C.BG_ELEVATED },
+  tabActive:    { backgroundColor: C.TEXT_PRIMARY },
+  tabText:      { color: C.TEXT_SECONDARY, fontSize: 12, fontWeight: '600' },
+  tabTextActive:{ color: C.BG_BASE },
 
-  // ── Lesson cards ──────────────────────────────────────────────────────────
-  lessonList:  { flex: 1 },
-  listContent: { padding: 16, gap: 12, paddingBottom: 40 },
+  // ── Canvas ─────────────────────────────────────────────────────────────────
+  canvas:        { flex: 1 },
+  canvasContent: { paddingBottom: 60, paddingTop: 4 },
 
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e0e0ea',
-    padding: 16,
-    gap: 8,
-    overflow: 'hidden',
-  },
-  cardHeader: {
+  // ── Category banner ────────────────────────────────────────────────────────
+  banner: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  cardTitle: { color: '#1a1a2e', fontSize: 16, fontWeight: '700', flex: 1 },
-
-  badge:                   { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
-  badgeBeginner:           { backgroundColor: '#c8eedd' },
-  badgeIntermediate:       { backgroundColor: '#fde8c4' },
-  badgeText:               { fontSize: 11, fontWeight: '700' },
-  badgeBeginnerText:       { color: '#1a7a40' },
-  badgeIntermediateText:   { color: '#a05a10' },
-
-  cardDescription: { color: '#666680', fontSize: 13, lineHeight: 19 },
-
-  cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 2,
-  },
-  progressText: {
-    color: '#666680',
-    fontSize: 12,
-    fontWeight: '600',
-    flexShrink: 0,
-    minWidth: 36,
-  },
-  progressTrack: {
-    flex: 1,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#c8e6d4',
-    flexDirection: 'row',
-    overflow: 'hidden',
-  },
-  progressFill: {
-    backgroundColor: '#1a9a68',
-    height: '100%',
-  },
-
-  playBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#2563eb',
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
+    gap: 10,
+    marginHorizontal: 24,
+    marginTop: 28,
+    marginBottom: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    borderRadius: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  playBtnText: { color: '#fff', fontSize: 13, marginLeft: 2 },
+  bannerEmoji: { fontSize: 22 },
+  bannerName:  { fontSize: 15, fontWeight: '700', color: C.TEXT_PRIMARY },
+
+  // ── Connector ─────────────────────────────────────────────────────────────
+  connectorWrap: { height: 44, alignItems: 'center', justifyContent: 'center' },
+  connectorLine: { height: 40, justifyContent: 'space-between', alignItems: 'center' },
+  connectorDot:  { width: 4, height: 4, borderRadius: 2, backgroundColor: C.BORDER_DEFAULT },
+
+  sectionBottom: { height: 12 },
 });
