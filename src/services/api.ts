@@ -24,7 +24,6 @@ export type LessonSummary  = {
   id: string;
   title: string;
   description: string;
-  hook: string;
   difficulty: 'beginner' | 'intermediate';
 };
 export type LessonDetail   = LessonSummary & { chapters: LessonChapter[] };

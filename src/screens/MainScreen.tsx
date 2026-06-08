@@ -580,12 +580,6 @@ export function MainScreen({ navigation }: Props) {
         visible={openLesson !== null}
         lesson={openLesson}
         onClose={() => setOpenLesson(null)}
-        onPracticeItem={(sentence) => {
-          setOpenLesson(null);
-          handleTabSwitch('chat');
-          wsRef.current?.sendSetTopic(`Let's practice this sentence: "${sentence}"`);
-          setAppState('processing');
-        }}
       />
       <TopicSheet
         visible={sheetOpen}

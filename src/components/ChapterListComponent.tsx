@@ -16,12 +16,11 @@ type Props = {
   visible: boolean;
   lesson: LessonDetail | null;
   onClose: () => void;
-  onPracticeItem?: (sentence: string) => void;
 };
 
 const SHEET_HEIGHT = Dimensions.get('window').height * 0.85;
 
-export function ChapterListComponent({ visible, lesson, onClose, onPracticeItem }: Props) {
+export function ChapterListComponent({ visible, lesson, onClose }: Props) {
   const slideAnim = useRef(new Animated.Value(SHEET_HEIGHT)).current;
 
   useEffect(() => {
@@ -81,21 +80,12 @@ export function ChapterListComponent({ visible, lesson, onClose, onPracticeItem 
                 </View>
 
                 {chapter.items.map((item, idx) => (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={styles.item}
-                    onPress={onPracticeItem ? () => { onPracticeItem(item.sentence); onClose(); } : undefined}
-                    activeOpacity={onPracticeItem ? 0.6 : 1}
-                    disabled={!onPracticeItem}
-                  >
+                  <View key={item.id} style={styles.item}>
                     <Text style={styles.itemNumber}>
                       {String(idx + 1).padStart(2, '0')}
                     </Text>
                     <Text style={styles.itemSentence}>{item.sentence}</Text>
-                    {onPracticeItem && (
-                      <Text style={styles.practiceHint}>›</Text>
-                    )}
-                  </TouchableOpacity>
+                  </View>
                 ))}
 
               </View>
@@ -194,11 +184,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 23,
     flex: 1,
-  },
-  practiceHint: {
-    color: '#9999b0',
-    fontSize: 18,
-    fontWeight: '300',
-    alignSelf: 'center',
   },
 });

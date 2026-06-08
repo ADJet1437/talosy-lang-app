@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -21,6 +21,12 @@ type Props = {
 };
 
 const CARD_BG = '#edf7f2';
+
+function seededRandom(seed: string): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
+  return Math.abs(h) / 2147483647;
+}
 
 export function LessonsScreen({ onOpenLesson }: Props) {
   const [categories, setCategories]               = useState<LessonCategory[]>([]);
@@ -107,7 +113,12 @@ export function LessonsScreen({ onOpenLesson }: Props) {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       >
-        {currentLessons.map((lesson) => (
+        {currentLessons.map((lesson) => {
+          const total     = Math.floor(seededRandom(lesson.id + 't') * 40) + 10;
+          const completed = Math.floor(seededRandom(lesson.id + 'c') * (total + 1));
+          const pct       = total > 0 ? completed / total : 0;
+
+          return (
             <View
               key={lesson.id}
               style={[styles.card, { backgroundColor: CARD_BG }]}
@@ -130,7 +141,10 @@ export function LessonsScreen({ onOpenLesson }: Props) {
               <Text style={styles.cardDescription}>{lesson.description}</Text>
 
               <View style={styles.cardFooter}>
-                <Text style={styles.cardHook} numberOfLines={2}>{lesson.hook}</Text>
+                <Text style={styles.progressText}>{completed}/{total}</Text>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${pct * 100}%` }]} />
+                </View>
                 <TouchableOpacity
                   style={styles.playBtn}
                   onPress={() => handlePlay(lesson)}
@@ -145,7 +159,8 @@ export function LessonsScreen({ onOpenLesson }: Props) {
               </View>
 
             </View>
-        ))}
+          );
+        })}
       </ScrollView>
 
     </View>
@@ -212,17 +227,28 @@ const styles = StyleSheet.create({
 
   cardFooter: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
+    alignItems: 'center',
     gap: 10,
     marginTop: 2,
   },
-  cardHook: {
-    color: '#9999b0',
+  progressText: {
+    color: '#666680',
     fontSize: 12,
-    lineHeight: 18,
-    fontStyle: 'italic',
+    fontWeight: '600',
+    flexShrink: 0,
+    minWidth: 36,
+  },
+  progressTrack: {
     flex: 1,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#c8e6d4',
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    backgroundColor: '#1a9a68',
+    height: '100%',
   },
 
   playBtn: {
