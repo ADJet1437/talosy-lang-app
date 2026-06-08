@@ -17,6 +17,31 @@ const WS_BASE = `ws://${HOST}:8000/api/v1`;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+// Lessons
+export type LessonItem     = { id: string; sentence: string };
+export type LessonChapter  = { number: number; title: string; items: LessonItem[] };
+export type LessonSummary  = {
+  id: string;
+  title: string;
+  description: string;
+  hook: string;
+  difficulty: 'beginner' | 'intermediate';
+};
+export type LessonDetail   = LessonSummary & { chapters: LessonChapter[] };
+export type LessonCategory = { id: string; name: string; lessons: LessonSummary[] };
+
+export async function fetchLessonCategories(): Promise<LessonCategory[]> {
+  const res = await fetch(`${BASE_URL}/lessons`);
+  if (!res.ok) throw new Error('Failed to fetch lessons');
+  return res.json();
+}
+
+export async function fetchLessonDetail(lessonId: string): Promise<LessonDetail> {
+  const res = await fetch(`${BASE_URL}/lessons/${lessonId}`);
+  if (!res.ok) throw new Error('Failed to fetch lesson');
+  return res.json();
+}
+
 export type WordLookupResult = {
   explanation: string;
   example: string;
@@ -32,7 +57,7 @@ export type SessionSummary = {
 };
 
 export type WSIncoming =
-  | { type: 'ready'; opening_text: string; opening_audio: string | null }
+  | { type: 'ready' }
   | { type: 'transcript'; text: string }
   | { type: 'ai_response'; text: string; audio: string; translation?: string; suggestion?: string }
   | { type: 'no_speech' }
@@ -40,7 +65,7 @@ export type WSIncoming =
   | { type: 'error'; message: string };
 
 export type WSHandlers = {
-  onReady: (openingText: string, openingAudio: string | null) => void;
+  onReady: () => void;
   onTranscript: (text: string) => void;
   onAIResponse: (text: string, audio: string, translation?: string, suggestion?: string) => void;
   onNoSpeech: () => void;
@@ -62,17 +87,14 @@ export async function createSession(language: string, nativeLanguage: string): P
   return data.session_id;
 }
 
-export async function fetchSummary(sessionId: string): Promise<SessionSummary | null> {
-  for (let attempt = 0; attempt < 15; attempt++) {
-    if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
-    try {
-      const res = await fetch(`${BASE_URL}/talkos/sessions/${sessionId}/summary`);
-      if (res.ok) return res.json();
-    } catch {
-      // retry
-    }
+export async function fetchReview(sessionId: string): Promise<SessionSummary | null> {
+  try {
+    const res = await fetch(`${BASE_URL}/talkos/sessions/${sessionId}/review`);
+    if (res.ok) return res.json();
+    return null;
+  } catch {
+    return null;
   }
-  return null;
 }
 
 export async function fetchTTSBase64(text: string, speed: number): Promise<string> {
@@ -129,7 +151,7 @@ export class TalkosWS {
       }
       switch (msg.type) {
         case 'ready':
-          handlers.onReady(msg.opening_text, msg.opening_audio);
+          handlers.onReady();
           break;
         case 'transcript':
           handlers.onTranscript(msg.text);

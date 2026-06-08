@@ -68,7 +68,7 @@ export function WordSheet({ visible, word, context, targetLanguage, nativeLangua
 
           {loading && (
             <View style={styles.centered}>
-              <ActivityIndicator color="#7c6af7" size="small" />
+              <ActivityIndicator color="#2563eb" size="small" />
             </View>
           )}
 
@@ -102,29 +102,29 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
   sheet: {
     height: SHEET_HEIGHT,
-    backgroundColor: '#16213e',
+    backgroundColor: '#f5f5f7',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 24,
   },
   word: {
-    color: '#e0e0ff',
+    color: '#1a1a2e',
     fontSize: 26,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   pronunciation: {
-    color: '#8888aa',
+    color: '#666680',
     fontSize: 14,
     marginTop: 4,
   },
   divider: {
     height: 1,
-    backgroundColor: '#2a2a4a',
+    backgroundColor: '#e0e0ea',
     marginVertical: 16,
   },
   centered: {
@@ -133,38 +133,40 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   errorText: {
-    color: '#8888aa',
+    color: '#9999b0',
     fontSize: 14,
   },
   content: {
     gap: 16,
   },
   explanation: {
-    color: '#c0c0e0',
+    color: '#1a1a2e',
     fontSize: 15,
     lineHeight: 22,
   },
   exampleBox: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0ea',
     padding: 14,
     gap: 6,
   },
   exampleLabel: {
-    color: '#7c6af7',
+    color: '#2563eb',
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
   exampleTarget: {
-    color: '#e0e0ff',
+    color: '#1a1a2e',
     fontSize: 15,
     lineHeight: 22,
     fontStyle: 'italic',
   },
   exampleTranslation: {
-    color: '#6a6a9a',
+    color: '#9999b0',
     fontSize: 13,
     lineHeight: 19,
   },
