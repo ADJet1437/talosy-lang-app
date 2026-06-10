@@ -67,6 +67,34 @@ export type WSHandlers = {
   onClose: () => void;
 };
 
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
+// ─── Streak ───────────────────────────────────────────────────────────────────
+
+export type StreakData = {
+  current_streak: number;
+  longest_streak: number;
+  active_days: string[];
+};
+
+export async function fetchStreak(token: string): Promise<StreakData> {
+  const res = await fetch(`${BASE_URL}/talkos/streak`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Failed to fetch streak');
+  return res.json();
+}
+
+export async function getMobileGoogleAuthUrl(
+  deepLink: string,
+): Promise<{ authorization_url: string; state: string }> {
+  const res = await fetch(
+    `${BASE_URL}/auth/google/mobile?deep_link=${encodeURIComponent(deepLink)}`,
+  );
+  if (!res.ok) throw new Error(`Failed to get Google auth URL: ${res.status}`);
+  return res.json();
+}
+
 // ─── API calls ────────────────────────────────────────────────────────────────
 
 export async function createSession(language: string, nativeLanguage: string): Promise<string> {

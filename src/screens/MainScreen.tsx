@@ -22,7 +22,8 @@ import {
 
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { C } from '../theme';
-import { LessonDetail, TalkosWS, createSession, fetchTTSBase64 } from '../services/api';
+import { LessonDetail, StreakData, TalkosWS, createSession, fetchStreak, fetchTTSBase64 } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { ChatTab, AppState, Message } from '../components/ChatTab';
 import { ProfileTab } from '../components/ProfileTab';
 import { LessonsScreen } from './LessonsScreen';
@@ -64,6 +65,8 @@ const EQ_MIN_H             = 3;
 const EQ_MAX_H             = 22;
 
 export function MainScreen({ navigation }: Props) {
+  const { token } = useAuth();
+
   // ─── State ────────────────────────────────────────────────────────────────
   const [language, setLanguage]                   = useState('English');
   const [nativeLanguage, setNativeLanguage]       = useState('English');
@@ -82,6 +85,9 @@ export function MainScreen({ navigation }: Props) {
   const [plusMenuOpen, setPlusMenuOpen]           = useState(false);
   const [openLesson, setOpenLesson]               = useState<LessonDetail | null>(null);
   const [streakOpen, setStreakOpen]               = useState(false);
+  const [streak, setStreak]                       = useState<{ current: number; longest: number; activeDays: Set<string> }>({
+    current: 0, longest: 0, activeDays: new Set(),
+  });
 
   // ─── Refs ─────────────────────────────────────────────────────────────────
   const wsRef                = useRef<TalkosWS | null>(null);
@@ -166,6 +172,21 @@ export function MainScreen({ navigation }: Props) {
     setMessages((prev) => [...prev, { role, text, translation }]);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   }, []);
+
+  // ─── Streak ───────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!token) return;
+    fetchStreak(token)
+      .then((data) =>
+        setStreak({
+          current:    data.current_streak,
+          longest:    data.longest_streak,
+          activeDays: new Set(data.active_days),
+        })
+      )
+      .catch(() => {});
+  }, [token]);
 
   // ─── Pulse animation ──────────────────────────────────────────────────────
 
@@ -479,7 +500,7 @@ export function MainScreen({ navigation }: Props) {
             activeOpacity={0.75}
           >
             <Text style={styles.streakFlame}>🔥</Text>
-            <Text style={styles.streakCount}>7</Text>
+            <Text style={styles.streakCount}>{streak.current}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -523,6 +544,9 @@ export function MainScreen({ navigation }: Props) {
           userMessages={messages.filter((m) => m.role === 'user').length}
           aiMessages={messages.filter((m) => m.role === 'ai').length}
           onToggleMode={toggleMode}
+          currentStreak={streak.current}
+          longestStreak={streak.longest}
+          activeDays={streak.activeDays}
         />
       </View>
 
@@ -598,6 +622,9 @@ export function MainScreen({ navigation }: Props) {
       <StreakSheet
         visible={streakOpen}
         onClose={() => setStreakOpen(false)}
+        currentStreak={streak.current}
+        longestStreak={streak.longest}
+        activeDays={streak.activeDays}
       />
 
     </View>

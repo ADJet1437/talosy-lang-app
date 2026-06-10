@@ -11,11 +11,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C } from '../theme';
-import { buildActiveDays, computeStreaks } from '../utils/streak';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
+  currentStreak: number;
+  longestStreak: number;
+  activeDays: Set<string>;
 };
 
 const SCREEN_WIDTH   = Dimensions.get('window').width;
@@ -49,11 +51,11 @@ function firstDow(y: number, m: number) { return (new Date(y, m, 1).getDay() + 6
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function StreakSheet({ visible, onClose }: Props) {
-  const insets      = useSafeAreaInsets();
-  const slideAnim   = useRef(new Animated.Value(SHEET_HEIGHT)).current;
-  const activeDays  = useRef(buildActiveDays()).current;
-  const { current, longest } = computeStreaks(activeDays);
+export function StreakSheet({ visible, onClose, currentStreak, longestStreak, activeDays }: Props) {
+  const insets    = useSafeAreaInsets();
+  const slideAnim = useRef(new Animated.Value(SHEET_HEIGHT)).current;
+  const current   = currentStreak;
+  const longest   = longestStreak;
 
   const now = new Date();
   const [viewYear,  setViewYear]  = useState(now.getFullYear());

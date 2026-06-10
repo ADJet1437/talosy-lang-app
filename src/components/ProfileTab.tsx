@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
+  Alert,
   FlatList,
   Modal,
   ScrollView,
@@ -12,8 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useAuth } from '../context/AuthContext';
 import { C } from '../theme';
-import { buildActiveDays, computeStreaks } from '../utils/streak';
 
 const LANGUAGES = [
   'English', 'Spanish', 'French', 'German', 'Swedish',
@@ -32,6 +33,9 @@ type Props = {
   userMessages: number;
   aiMessages: number;
   onToggleMode: () => void;
+  currentStreak: number;
+  longestStreak: number;
+  activeDays: Set<string>;
 };
 
 export function ProfileTab({
@@ -43,15 +47,17 @@ export function ProfileTab({
   userMessages,
   aiMessages,
   onToggleMode,
+  currentStreak,
+  longestStreak,
 }: Props) {
+  const { user, signOut } = useAuth();
+
   // ── Streak data ─────────────────────────────────────────────────────────────
-  const activeDays = useRef(buildActiveDays()).current;
-  const { current: streakCurrent, longest: streakLongest } = computeStreaks(activeDays);
-  const gap         = streakLongest - streakCurrent;
-  const progressPct = streakLongest > 0 ? Math.min(streakCurrent / streakLongest, 1) : 1;
+  const gap         = longestStreak - currentStreak;
+  const progressPct = longestStreak > 0 ? Math.min(currentStreak / longestStreak, 1) : 1;
   const motiveLine  = gap <= 0
     ? 'New personal best! 🏆'
-    : `${gap} more day${gap === 1 ? '' : 's'} to beat your best of ${streakLongest}`;
+    : `${gap} more day${gap === 1 ? '' : 's'} to beat your best of ${longestStreak}`;
 
   // ── Settings full-screen ────────────────────────────────────────────────────
   const [settingsVisible, setSettingsVisible] = useState(false);
@@ -86,8 +92,8 @@ export function ProfileTab({
         <View style={styles.avatarRow}>
           <View style={styles.avatar} />
           <View>
-            <Text style={styles.userName}>Alex Morgan</Text>
-            <Text style={styles.userEmail}>alex.morgan@gmail.com</Text>
+            <Text style={styles.userName}>{user?.name || 'User'}</Text>
+            <Text style={styles.userEmail}>{user?.email}</Text>
           </View>
         </View>
         <TouchableOpacity style={styles.settingsBtn} onPress={() => setSettingsVisible(true)} activeOpacity={0.7}>
@@ -105,7 +111,7 @@ export function ProfileTab({
           <View style={styles.streakTopRow}>
             <View style={styles.streakTitleRow}>
               <Text style={styles.streakFlame}>🔥</Text>
-              <Text style={styles.streakTitle}>{streakCurrent}-day streak</Text>
+              <Text style={styles.streakTitle}>{currentStreak}-day streak</Text>
             </View>
             <View style={styles.activeBadge}>
               <Text style={styles.activeBadgeText}>Active</Text>
@@ -118,20 +124,20 @@ export function ProfileTab({
           </View>
           <View style={styles.progressLabelRow}>
             <Text style={styles.motiveLine}>{motiveLine}</Text>
-            <Text style={styles.progressLabel}>{streakCurrent} / {streakLongest}</Text>
+            <Text style={styles.progressLabel}>{currentStreak} / {longestStreak}</Text>
           </View>
 
           {/* Mini stats */}
           <View style={styles.miniStatsRow}>
             <View style={styles.miniStat}>
               <Text style={styles.miniStatEmoji}>🔥</Text>
-              <Text style={styles.miniStatVal}>{streakCurrent}</Text>
+              <Text style={styles.miniStatVal}>{currentStreak}</Text>
               <Text style={styles.miniStatLbl}>Current</Text>
             </View>
             <View style={styles.miniStatDivider} />
             <View style={styles.miniStat}>
               <Text style={styles.miniStatEmoji}>⚡</Text>
-              <Text style={styles.miniStatVal}>{streakLongest}</Text>
+              <Text style={styles.miniStatVal}>{longestStreak}</Text>
               <Text style={styles.miniStatLbl}>Longest</Text>
             </View>
           </View>
@@ -220,6 +226,19 @@ export function ProfileTab({
                 <Text style={styles.rowValue}>v1.0.0</Text>
               </View>
             </View>
+
+            <TouchableOpacity
+              style={styles.logoutBtn}
+              onPress={() =>
+                Alert.alert('Sign out', 'Are you sure you want to sign out?', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Sign out', style: 'destructive', onPress: signOut },
+                ])
+              }
+              activeOpacity={0.8}
+            >
+              <Text style={styles.logoutText}>Sign out</Text>
+            </TouchableOpacity>
 
           </ScrollView>
         </View>
@@ -418,4 +437,14 @@ const styles = StyleSheet.create({
   listRowName:       { flex: 1, color: C.TEXT_SECONDARY, fontSize: 15 },
   listRowNameActive: { color: C.TEXT_PRIMARY, fontWeight: '600' },
   listRowCheck:      { color: C.PURPLE, fontSize: 16, fontWeight: '700' },
+
+  // ── Logout ──────────────────────────────────────────────────────────────────
+  logoutBtn: {
+    marginTop: 8,
+    borderRadius: 14,
+    borderWidth: 1, borderColor: C.RED,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  logoutText: { color: C.RED, fontSize: 15, fontWeight: '600' },
 });
