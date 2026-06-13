@@ -14,12 +14,15 @@ import {
   LessonSummary,
   fetchLessonCategories,
   fetchLessonDetail,
+  langCode,
 } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { LessonNode, NodePosition, NodeState } from '../components/LessonNode';
 import { C } from '../theme';
 
 type Props = {
   onOpenLesson: (lesson: LessonDetail) => void;
+  learnLang?: string;
 };
 
 const POSITIONS: NodePosition[] = ['center', 'left', 'right'];
@@ -42,20 +45,16 @@ const BANNER_EMOJI: Record<string, string> = {
   'Culture':       '🏮',
 };
 
-function seededRandom(seed: string): number {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
-  return Math.abs(h) / 2147483647;
+function realState(lesson: LessonSummary): { state: NodeState; dots: number } {
+  const { done_items, total_items } = lesson;
+  if (total_items === 0 || done_items === 0) return { state: 'todo', dots: 0 };
+  if (done_items >= total_items) return { state: 'done', dots: 5 };
+  const dots = Math.max(1, Math.min(4, Math.round((done_items / total_items) * 5)));
+  return { state: 'active', dots };
 }
 
-function fakeState(lesson: LessonSummary): { state: NodeState; dots: number } {
-  const r = seededRandom(lesson.id);
-  if (r > 0.65) return { state: 'done',   dots: 5 };
-  if (r > 0.30) return { state: 'active', dots: Math.max(1, Math.floor(seededRandom(lesson.id + 'd') * 4)) };
-  return               { state: 'todo',   dots: 0 };
-}
-
-export function LessonsScreen({ onOpenLesson }: Props) {
+export function LessonsScreen({ onOpenLesson, learnLang = 'English' }: Props) {
+  const { token } = useAuth();
   const [categories,        setCategories]        = useState<LessonCategory[]>([]);
   const [activeCategoryId,  setActiveCategoryId]  = useState<string | null>(null);
   const [loadingCategories, setLoadingCategories] = useState(true);
@@ -66,14 +65,14 @@ export function LessonsScreen({ onOpenLesson }: Props) {
   const sectionYs     = useRef<Record<string, number>>({});
 
   useEffect(() => {
-    fetchLessonCategories()
+    fetchLessonCategories(langCode(learnLang), token)
       .then((data) => {
         setCategories(data);
         if (data.length > 0) setActiveCategoryId(data[0].id);
       })
       .catch(() => setError('Could not load lessons. Is the server running?'))
       .finally(() => setLoadingCategories(false));
-  }, []);
+  }, [learnLang, token]);
 
   function handleTabPress(catId: string) {
     setActiveCategoryId(catId);
@@ -86,7 +85,7 @@ export function LessonsScreen({ onOpenLesson }: Props) {
     isStartingRef.current = true;
     setStarting(lesson.id);
     try {
-      const detail = await fetchLessonDetail(lesson.id);
+      const detail = await fetchLessonDetail(lesson.id, langCode(learnLang), token);
       onOpenLesson(detail);
     } catch {
       // silent — user can retry
@@ -151,7 +150,7 @@ export function LessonsScreen({ onOpenLesson }: Props) {
 
             {/* Lesson nodes */}
             {cat.lessons.map((lesson, idx) => {
-              const { state, dots } = fakeState(lesson);
+              const { state, dots } = realState(lesson);
               const position        = POSITIONS[idx % POSITIONS.length];
               const isLast          = idx === cat.lessons.length - 1;
 

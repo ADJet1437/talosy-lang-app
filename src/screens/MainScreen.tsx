@@ -28,7 +28,6 @@ import { ChatTab, AppState, Message } from '../components/ChatTab';
 import { ProfileTab } from '../components/ProfileTab';
 import { LessonsScreen } from './LessonsScreen';
 import { ChapterListComponent } from '../components/ChapterListComponent';
-import { TopicSheet } from '../components/TopicSheet';
 import { WordSheet } from '../components/WordSheet';
 import { StreakSheet } from '../components/StreakSheet';
 
@@ -42,7 +41,7 @@ const LANG_FLAG: Record<string, string> = {
   French:     '🇫🇷',
   German:     '🇩🇪',
   Japanese:   '🇯🇵',
-  Mandarin:   '🇨🇳',
+  Chinese:    '🇨🇳',
   Korean:     '🇰🇷',
   Italian:    '🇮🇹',
   Portuguese: '🇧🇷',
@@ -76,13 +75,10 @@ export function MainScreen({ navigation }: Props) {
   const [suggestion, setSuggestion]               = useState('');
   const [suggestionPlaying, setSuggestionPlaying] = useState(false);
   const [suggestionSpeed, setSuggestionSpeed]     = useState(1.0);
-  const [activeScene, setActiveScene]             = useState<string | null>(null);
-  const [sheetOpen, setSheetOpen]                 = useState(false);
   const [wordSheet, setWordSheet]                 = useState<{ word: string; context: string } | null>(null);
   const [activeTab, setActiveTab]                 = useState<ActiveTab>('chat');
   const [isImmersive, setIsImmersive]             = useState(false);
   const [isManualRecording, setIsManualRecording] = useState(false);
-  const [plusMenuOpen, setPlusMenuOpen]           = useState(false);
   const [openLesson, setOpenLesson]               = useState<LessonDetail | null>(null);
   const [streakOpen, setStreakOpen]               = useState(false);
   const [streak, setStreak]                       = useState<{ current: number; longest: number; activeDays: Set<string> }>({
@@ -287,7 +283,7 @@ export function MainScreen({ navigation }: Props) {
   useEffect(() => {
     let cancelled = false;
 
-    createSession(language, nativeLanguage).then((sessionId) => {
+    createSession(language, nativeLanguage, token).then((sessionId) => {
       if (cancelled) return;
       sessionIdRef.current = sessionId;
       setAppState('connecting');
@@ -342,7 +338,6 @@ export function MainScreen({ navigation }: Props) {
     const next = !isImmersive;
     setIsImmersive(next);
     isImmersiveRef.current = next;
-    setPlusMenuOpen(false);
 
     if (next) {
       if (isManualRecording) {
@@ -368,7 +363,6 @@ export function MainScreen({ navigation }: Props) {
   async function handleBarPress() {
     if (isImmersive) return;
     if (appState === 'ai_speaking' || appState === 'processing' || appState === 'connecting') return;
-    setPlusMenuOpen(false);
 
     if (isManualRecording) {
       setIsManualRecording(false);
@@ -406,7 +400,6 @@ export function MainScreen({ navigation }: Props) {
 
   function handleTabSwitch(tab: ActiveTab) {
     if (tab === activeTab) return;
-    setPlusMenuOpen(false);
     setActiveTab(tab);
 
     if (tab !== 'chat' && !isPausedRef.current) {
@@ -430,22 +423,6 @@ export function MainScreen({ navigation }: Props) {
         setAppState('paused');
       }
     }
-  }
-
-  // ─── Topic selection ──────────────────────────────────────────────────────
-
-  function handleSceneSelect(scene: string, category: string) {
-    setSheetOpen(false);
-    setActiveScene(scene);
-    isActiveRef.current = false;
-    stopVadPolling();
-    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
-    if (isManualRecording) { setIsManualRecording(false); stopEqualizerAnimation(); }
-    recorder.stop().catch(() => {});
-    flushStreaming();
-    setSuggestion('');
-    setAppState('processing');
-    wsRef.current?.sendSetTopic(`Let's focus our conversation on "${scene}" (${category}).`);
   }
 
   // ─── Suggestion TTS ───────────────────────────────────────────────────────
@@ -516,7 +493,6 @@ export function MainScreen({ navigation }: Props) {
           suggestion={suggestion}
           suggestionPlaying={suggestionPlaying}
           suggestionSpeed={suggestionSpeed}
-          plusMenuOpen={plusMenuOpen}
           pulseAnim={pulseAnim}
           equalizerAnims={equalizerAnims}
           scrollRef={scrollRef}
@@ -524,13 +500,13 @@ export function MainScreen({ navigation }: Props) {
           onWordTap={(word, context) => setWordSheet({ word, context })}
           onSuggestionPlay={handleSuggestionPlay}
           onSuggestionSpeedToggle={() => setSuggestionSpeed((s) => s === 1.0 ? 0.75 : s === 0.75 ? 0.5 : 1.0)}
-          onPlusToggle={() => setPlusMenuOpen((v) => !v)}
         />
       </View>
 
       <View style={[styles.tabContent, activeTab !== 'lessons' && styles.tabHidden]}>
         <LessonsScreen
           onOpenLesson={(lesson) => setOpenLesson(lesson)}
+          learnLang={language}
         />
       </View>
 
@@ -541,8 +517,6 @@ export function MainScreen({ navigation }: Props) {
           nativeLang={nativeLanguage}
           onLearnLangChange={setLanguage}
           onNativeLangChange={setNativeLanguage}
-          userMessages={messages.filter((m) => m.role === 'user').length}
-          aiMessages={messages.filter((m) => m.role === 'ai').length}
           onToggleMode={toggleMode}
           currentStreak={streak.current}
           longestStreak={streak.longest}
@@ -572,44 +546,15 @@ export function MainScreen({ navigation }: Props) {
         })}
       </View>
 
-      {/* Plus menu overlay + floating menu — must be above tab bar */}
-      {plusMenuOpen && (
-        <TouchableOpacity style={styles.plusOverlay} onPress={() => setPlusMenuOpen(false)} activeOpacity={1} />
-      )}
-      {plusMenuOpen && (
-        <View style={styles.plusMenuFloating}>
-          <TouchableOpacity
-            style={styles.plusMenuItem}
-            onPress={() => { setPlusMenuOpen(false); setSheetOpen(true); }}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.plusMenuIcon}>💬</Text>
-            <Text style={styles.plusMenuText}>Topics</Text>
-          </TouchableOpacity>
-          <View style={styles.plusMenuDivider} />
-          <TouchableOpacity style={styles.plusMenuItem} onPress={() => setPlusMenuOpen(false)} activeOpacity={0.7}>
-            <Text style={styles.plusMenuIcon}>📄</Text>
-            <Text style={styles.plusMenuText}>Upload File</Text>
-          </TouchableOpacity>
-          <View style={styles.plusMenuDivider} />
-          <TouchableOpacity style={styles.plusMenuItem} onPress={() => setPlusMenuOpen(false)} activeOpacity={0.7}>
-            <Text style={styles.plusMenuIcon}>📷</Text>
-            <Text style={styles.plusMenuText}>Camera</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       {/* Sheets */}
       <ChapterListComponent
         visible={openLesson !== null}
         lesson={openLesson}
         onClose={() => setOpenLesson(null)}
-      />
-      <TopicSheet
-        visible={sheetOpen}
-        activeScene={activeScene}
-        onClose={() => setSheetOpen(false)}
-        onSelect={handleSceneSelect}
+        onLessonProgressUpdate={(lessonId) => {
+          // Refresh lesson list so node dots update after completing items
+          setOpenLesson(null);
+        }}
       />
       <WordSheet
         visible={wordSheet !== null}
@@ -669,25 +614,4 @@ const styles = StyleSheet.create({
   tabBarItem:        { flex: 1, alignItems: 'center', gap: 3 },
   tabBarLabel:       { fontSize: 11, fontWeight: '600', color: C.TEXT_MUTED },
   tabBarLabelActive: { color: C.TEXT_PRIMARY },
-
-  plusOverlay: { ...StyleSheet.absoluteFillObject },
-  plusMenuFloating: {
-    position: 'absolute',
-    bottom: 137,
-    right: 16,
-    width: 190,
-    backgroundColor: C.BG_ELEVATED,
-    borderRadius: 14,
-    borderWidth: 1, borderColor: C.BORDER_DEFAULT,
-    overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12,
-    elevation: 10,
-  },
-  plusMenuItem: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: 16, paddingVertical: 14,
-  },
-  plusMenuIcon:    { fontSize: 18 },
-  plusMenuText:    { color: C.TEXT_PRIMARY, fontSize: 14, fontWeight: '500' },
-  plusMenuDivider: { height: 1, backgroundColor: C.BORDER_DEFAULT, marginHorizontal: 12 },
 });

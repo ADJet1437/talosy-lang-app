@@ -18,27 +18,65 @@ const WS_BASE = `ws://${HOST}:8000/api/v1`;
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 // Lessons
-export type LessonItem     = { id: string; sentence: string };
+export type LessonItem     = { id: string; sentence: string; completed: boolean };
 export type LessonChapter  = { number: number; title: string; items: LessonItem[] };
 export type LessonSummary  = {
   id: string;
   title: string;
   description: string;
   difficulty: 'beginner' | 'intermediate';
+  total_items: number;
+  done_items: number;
 };
 export type LessonDetail   = LessonSummary & { chapters: LessonChapter[] };
 export type LessonCategory = { id: string; name: string; lessons: LessonSummary[] };
 
-export async function fetchLessonCategories(): Promise<LessonCategory[]> {
-  const res = await fetch(`${BASE_URL}/lessons`);
+// Map app language names to ISO codes used by the backend
+const LANG_CODE: Record<string, string> = {
+  English:    'en',
+  Swedish:    'sv',
+  Chinese:    'zh',
+  Spanish:    'es',
+  French:     'fr',
+  German:     'de',
+  Japanese:   'ja',
+  Korean:     'ko',
+  Italian:    'it',
+  Portuguese: 'pt',
+};
+
+export function langCode(language: string): string {
+  return LANG_CODE[language] ?? 'en';
+}
+
+export async function fetchLessonCategories(
+  language = 'en',
+  token?: string | null,
+): Promise<LessonCategory[]> {
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${BASE_URL}/lessons?language=${language}`, { headers });
   if (!res.ok) throw new Error('Failed to fetch lessons');
   return res.json();
 }
 
-export async function fetchLessonDetail(lessonId: string): Promise<LessonDetail> {
-  const res = await fetch(`${BASE_URL}/lessons/${lessonId}`);
+export async function fetchLessonDetail(
+  lessonId: string,
+  language = 'en',
+  token?: string | null,
+): Promise<LessonDetail> {
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${BASE_URL}/lessons/${lessonId}?language=${language}`, { headers });
   if (!res.ok) throw new Error('Failed to fetch lesson');
   return res.json();
+}
+
+export async function completeLessonItem(token: string, itemId: string): Promise<void> {
+  await fetch(`${BASE_URL}/lessons/items/${itemId}/complete`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
 }
 
 export type WordLookupResult = {
@@ -77,6 +115,20 @@ export type StreakData = {
   active_days: string[];
 };
 
+export type ConversationGrowthPoint = { date: string; total: number };
+
+export async function fetchConversationGrowth(
+  token: string,
+  range: '7d' | '30d' | '90d' = '7d',
+): Promise<ConversationGrowthPoint[]> {
+  const res = await fetch(`${BASE_URL}/talkos/conversation-growth?range=${range}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Failed to fetch conversation growth');
+  const body: { data: ConversationGrowthPoint[] } = await res.json();
+  return body.data;
+}
+
 export async function fetchStreak(token: string): Promise<StreakData> {
   const res = await fetch(`${BASE_URL}/talkos/streak`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -97,10 +149,16 @@ export async function getMobileGoogleAuthUrl(
 
 // ─── API calls ────────────────────────────────────────────────────────────────
 
-export async function createSession(language: string, nativeLanguage: string): Promise<string> {
+export async function createSession(
+  language: string,
+  nativeLanguage: string,
+  token?: string | null,
+): Promise<string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(`${BASE_URL}/talkos/sessions`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ language, native_language: nativeLanguage }),
   });
   if (!res.ok) throw new Error(`Failed to create session: ${res.status}`);

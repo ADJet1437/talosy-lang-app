@@ -26,7 +26,6 @@ type Props = {
   suggestion: string;
   suggestionPlaying: boolean;
   suggestionSpeed: number;
-  plusMenuOpen: boolean;
   pulseAnim: Animated.Value;
   equalizerAnims: Animated.Value[];
   scrollRef: React.RefObject<ScrollView>;
@@ -34,7 +33,6 @@ type Props = {
   onWordTap: (word: string, context: string) => void;
   onSuggestionPlay: () => void;
   onSuggestionSpeedToggle: () => void;
-  onPlusToggle: () => void;
 };
 
 const STATE_CONFIG: Record<AppState, { color: string; icon: string; spinner: boolean; label: string }> = {
@@ -56,7 +54,6 @@ export function ChatTab({
   suggestion,
   suggestionPlaying,
   suggestionSpeed,
-  plusMenuOpen,
   pulseAnim,
   equalizerAnims,
   scrollRef,
@@ -64,7 +61,6 @@ export function ChatTab({
   onWordTap,
   onSuggestionPlay,
   onSuggestionSpeedToggle,
-  onPlusToggle,
 }: Props) {
   const cfg = {
     ...STATE_CONFIG[appState],
@@ -181,35 +177,27 @@ export function ChatTab({
 
       {/* Input bar */}
       <View style={styles.inputSection}>
-        <View style={styles.barRow}>
-          <TouchableOpacity
-            style={[styles.inputBar, barDisabled && styles.inputBarDisabled]}
-            onPress={onBarPress}
-            disabled={barDisabled}
-            activeOpacity={0.8}
-          >
-            {isManualRecording ? (
-              <View style={styles.equalizerRow}>
-                {equalizerAnims.map((anim, i) => (
-                  <Animated.View key={i} style={[styles.equalizerBar, { height: anim }]} />
-                ))}
-              </View>
-            ) : (
-              <>
-                <Text style={[styles.inputBarIcon, barDisabled && styles.inputBarIconDisabled]}>🎙</Text>
-                <Text style={[styles.inputBarText, barDisabled && styles.inputBarTextDisabled]}>
-                  {barLabel()}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.plusBtnWrapper}>
-            <TouchableOpacity style={styles.plusBtn} onPress={onPlusToggle} activeOpacity={0.8}>
-              <Text style={styles.plusBtnText}>+</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <TouchableOpacity
+          style={[styles.inputBar, barDisabled && styles.inputBarDisabled]}
+          onPress={onBarPress}
+          disabled={barDisabled}
+          activeOpacity={0.8}
+        >
+          {isManualRecording ? (
+            <View style={styles.equalizerRow}>
+              {equalizerAnims.map((anim, i) => (
+                <Animated.View key={i} style={[styles.equalizerBar, { height: anim }]} />
+              ))}
+            </View>
+          ) : (
+            <>
+              <Text style={[styles.inputBarIcon, barDisabled && styles.inputBarIconDisabled]}>🎙</Text>
+              <Text style={[styles.inputBarText, barDisabled && styles.inputBarTextDisabled]}>
+                {barLabel()}
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
       </View>
 
     </View>
@@ -259,10 +247,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: C.BORDER_DEFAULT,
     paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12,
   },
-  barRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
   inputBar: {
-    flex: 1, height: 48,
+    height: 48,
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: C.BG_ELEVATED,
     borderRadius: 24, borderWidth: 1.5, borderColor: C.BORDER_DEFAULT,
@@ -273,14 +260,6 @@ const styles = StyleSheet.create({
   inputBarIconDisabled: { opacity: 0.5 },
   inputBarText:         { color: C.TEXT_SECONDARY, fontSize: 15 },
   inputBarTextDisabled: { color: C.TEXT_MUTED },
-
-  plusBtnWrapper: { position: 'relative' },
-  plusBtn: {
-    width: 48, height: 48, borderRadius: 24,
-    backgroundColor: C.PURPLE,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  plusBtnText: { color: C.TEXT_ON_COLOR, fontSize: 24, fontWeight: '300', lineHeight: 28, marginTop: -2 },
 
   equalizerRow: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 2 },
   equalizerBar: { flex: 1, borderRadius: 1.5, backgroundColor: C.PURPLE },

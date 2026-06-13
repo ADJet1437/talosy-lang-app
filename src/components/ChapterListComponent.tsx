@@ -10,23 +10,17 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { LessonDetail, LessonChapter, LessonItem } from '../services/api';
+import { LessonDetail, LessonChapter, LessonItem, completeLessonItem } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { ItemPracticeSheet } from './ItemPracticeSheet';
 import { C } from '../theme';
-
-// Fake completion state — replace with real persistence later
-function seededBool(seed: string): boolean {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
-  return (Math.abs(h) % 3) !== 0; // ~67% chance done
-}
 
 function chapterProgress(
   chapter: LessonChapter,
   extra: Set<string>,
 ): { done: number; total: number; allDone: boolean } {
   const total = chapter.items.length;
-  const done  = chapter.items.filter((item) => seededBool(item.id) || extra.has(item.id)).length;
+  const done  = chapter.items.filter((item) => item.completed || extra.has(item.id)).length;
   return { done, total, allDone: done === total };
 }
 
@@ -34,19 +28,21 @@ type Props = {
   visible: boolean;
   lesson: LessonDetail | null;
   onClose: () => void;
+  onLessonProgressUpdate?: (lessonId: string) => void;
 };
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
-export function ChapterListComponent({ visible, lesson, onClose }: Props) {
+export function ChapterListComponent({ visible, lesson, onClose, onLessonProgressUpdate }: Props) {
   const insets = useSafeAreaInsets();
+  const { token } = useAuth();
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
   const [activeItem,    setActiveItem]    = useState<LessonItem | null>(null);
   const [practiceOpen,  setPracticeOpen]  = useState(false);
   const [extraUnlocked, setExtraUnlocked] = useState<Set<string>>(new Set());
 
   function isDone(item: LessonItem) {
-    return seededBool(item.id) || extraUnlocked.has(item.id);
+    return item.completed || extraUnlocked.has(item.id);
   }
 
   function openPractice(item: LessonItem) {
@@ -56,16 +52,20 @@ export function ChapterListComponent({ visible, lesson, onClose }: Props) {
 
   function handleUnlock(itemId: string) {
     setExtraUnlocked((prev) => new Set([...prev, itemId]));
+    if (token) {
+      completeLessonItem(token, itemId).catch(() => {});
+    }
   }
 
   useEffect(() => {
+    if (visible) setExtraUnlocked(new Set());
     Animated.spring(slideAnim, {
       toValue: visible ? 0 : SCREEN_WIDTH,
       tension: 70,
       friction: 12,
       useNativeDriver: true,
     }).start();
-  }, [visible]);
+  }, [visible, lesson?.id]);
 
   return (
     <Animated.View
