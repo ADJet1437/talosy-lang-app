@@ -169,6 +169,12 @@ export function MainScreen({ navigation }: Props) {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   }, []);
 
+  // ─── Audio session init ───────────────────────────────────────────────────
+
+  useEffect(() => {
+    setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
+  }, []);
+
   // ─── Streak ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -327,7 +333,7 @@ export function MainScreen({ navigation }: Props) {
       stopVadPolling();
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (streamingIntervalRef.current) clearInterval(streamingIntervalRef.current);
-      recorder.stop().catch(() => {});
+      try { recorder.stop().catch(() => {}); } catch {}
       wsRef.current?.close();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -343,7 +349,7 @@ export function MainScreen({ navigation }: Props) {
       if (isManualRecording) {
         setIsManualRecording(false);
         stopEqualizerAnimation();
-        recorder.stop().catch(() => {});
+        try { recorder.stop().catch(() => {}); } catch {}
       }
       tabPausedRef.current = false;
       isPausedRef.current = false;
@@ -352,7 +358,7 @@ export function MainScreen({ navigation }: Props) {
       isActiveRef.current = false;
       stopVadPolling();
       if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
-      recorder.stop().catch(() => {});
+      try { recorder.stop().catch(() => {}); } catch {}
       isPausedRef.current = true;
       setAppState('paused');
     }
@@ -408,7 +414,7 @@ export function MainScreen({ navigation }: Props) {
       stopVadPolling();
       if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
       if (isManualRecording) { setIsManualRecording(false); stopEqualizerAnimation(); }
-      recorder.stop().catch(() => {});
+      try { recorder.stop().catch(() => {}); } catch {}
       isPausedRef.current = true;
       flushStreaming();
       setAppState('paused');

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -37,6 +38,7 @@ export function ChapterListComponent({ visible, lesson, onClose, onLessonProgres
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
+  const [modalVisible,  setModalVisible]  = useState(false);
   const [activeItem,    setActiveItem]    = useState<LessonItem | null>(null);
   const [practiceOpen,  setPracticeOpen]  = useState(false);
   const [extraUnlocked, setExtraUnlocked] = useState<Set<string>>(new Set());
@@ -58,20 +60,33 @@ export function ChapterListComponent({ visible, lesson, onClose, onLessonProgres
   }
 
   useEffect(() => {
-    if (visible) setExtraUnlocked(new Set());
-    Animated.spring(slideAnim, {
-      toValue: visible ? 0 : SCREEN_WIDTH,
-      tension: 70,
-      friction: 12,
-      useNativeDriver: true,
-    }).start();
+    if (visible) {
+      setExtraUnlocked(new Set());
+      setModalVisible(true);
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 70,
+        friction: 12,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.spring(slideAnim, {
+        toValue: SCREEN_WIDTH,
+        tension: 70,
+        friction: 12,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) setModalVisible(false);
+      });
+    }
   }, [visible, lesson?.id]);
 
   return (
-    <Animated.View
-      style={[styles.screen, { transform: [{ translateX: slideAnim }] }]}
-      pointerEvents={visible ? 'auto' : 'none'}
-    >
+    <Modal visible={modalVisible} transparent animationType="none" onRequestClose={onClose}>
+      <Animated.View
+        style={[styles.screen, { transform: [{ translateX: slideAnim }] }]}
+        pointerEvents={visible ? 'auto' : 'none'}
+      >
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <View style={styles.headerTop}>
@@ -158,6 +173,7 @@ export function ChapterListComponent({ visible, lesson, onClose, onLessonProgres
         onUnlock={handleUnlock}
       />
     </Animated.View>
+    </Modal>
   );
 }
 
@@ -165,7 +181,6 @@ const styles = StyleSheet.create({
   screen: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: C.BG_BASE,
-    zIndex: 100,
   },
 
   // ── Header ────────────────────────────────────────────────────────────────

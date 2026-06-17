@@ -33,7 +33,8 @@
     },
     "scheme": "talkos",
     "plugins": [
-      "expo-audio"
+      "expo-audio",
+      "expo-web-browser"
     ]
   }
 }
