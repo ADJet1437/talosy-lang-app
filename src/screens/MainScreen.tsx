@@ -22,12 +22,11 @@ import {
 
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { C } from '../theme';
-import { LessonDetail, StreakData, TalkosWS, createSession, fetchStreak, fetchTTSBase64 } from '../services/api';
+import { TalkosWS, createSession, fetchStreak, fetchTTSBase64 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ChatTab, AppState, Message } from '../components/ChatTab';
 import { ProfileTab } from '../components/ProfileTab';
 import { LessonsScreen } from './LessonsScreen';
-import { ChapterListComponent } from '../components/ChapterListComponent';
 import { WordSheet } from '../components/WordSheet';
 import { StreakSheet } from '../components/StreakSheet';
 
@@ -79,7 +78,6 @@ export function MainScreen({ navigation }: Props) {
   const [activeTab, setActiveTab]                 = useState<ActiveTab>('chat');
   const [isImmersive, setIsImmersive]             = useState(false);
   const [isManualRecording, setIsManualRecording] = useState(false);
-  const [openLesson, setOpenLesson]               = useState<LessonDetail | null>(null);
   const [streakOpen, setStreakOpen]               = useState(false);
   const [streak, setStreak]                       = useState<{ current: number; longest: number; activeDays: Set<string> }>({
     current: 0, longest: 0, activeDays: new Set(),
@@ -510,10 +508,7 @@ export function MainScreen({ navigation }: Props) {
       </View>
 
       <View style={[styles.tabContent, activeTab !== 'lessons' && styles.tabHidden]}>
-        <LessonsScreen
-          onOpenLesson={(lesson) => setOpenLesson(lesson)}
-          learnLang={language}
-        />
+        <LessonsScreen learnLang={language} />
       </View>
 
       <View style={[styles.tabContent, activeTab !== 'me' && styles.tabHidden]}>
@@ -553,15 +548,6 @@ export function MainScreen({ navigation }: Props) {
       </View>
 
       {/* Sheets */}
-      <ChapterListComponent
-        visible={openLesson !== null}
-        lesson={openLesson}
-        onClose={() => setOpenLesson(null)}
-        onLessonProgressUpdate={(lessonId) => {
-          // Refresh lesson list so node dots update after completing items
-          setOpenLesson(null);
-        }}
-      />
       <WordSheet
         visible={wordSheet !== null}
         word={wordSheet?.word ?? ''}

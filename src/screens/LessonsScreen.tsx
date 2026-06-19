@@ -1,3 +1,5 @@
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -10,20 +12,21 @@ import {
 
 import {
   LessonCategory,
-  LessonDetail,
   LessonSummary,
   fetchLessonCategories,
   fetchLessonDetail,
   langCode,
 } from '../services/api';
+import { RootStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../context/AuthContext';
 import { LessonNode, NodePosition, NodeState } from '../components/LessonNode';
 import { C } from '../theme';
 
 type Props = {
-  onOpenLesson: (lesson: LessonDetail) => void;
   learnLang?: string;
 };
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 const POSITIONS: NodePosition[] = ['center', 'left', 'right'];
 
@@ -53,7 +56,8 @@ function realState(lesson: LessonSummary): { state: NodeState; dots: number } {
   return { state: 'active', dots };
 }
 
-export function LessonsScreen({ onOpenLesson, learnLang = 'English' }: Props) {
+export function LessonsScreen({ learnLang = 'English' }: Props) {
+  const navigation = useNavigation<Nav>();
   const { token } = useAuth();
   const [categories,        setCategories]        = useState<LessonCategory[]>([]);
   const [activeCategoryId,  setActiveCategoryId]  = useState<string | null>(null);
@@ -74,19 +78,13 @@ export function LessonsScreen({ onOpenLesson, learnLang = 'English' }: Props) {
       .finally(() => setLoadingCategories(false));
   }, [learnLang, token]);
 
-  function handleTabPress(catId: string) {
-    setActiveCategoryId(catId);
-    const y = sectionYs.current[catId];
-    if (y !== undefined) scrollRef.current?.scrollTo({ y, animated: true });
-  }
-
   async function handlePlay(lesson: LessonSummary) {
     if (isStartingRef.current) return;
     isStartingRef.current = true;
     setStarting(lesson.id);
     try {
       const detail = await fetchLessonDetail(lesson.id, langCode(learnLang), token);
-      onOpenLesson(detail);
+      navigation.navigate('ChapterList', { lesson: detail });
     } catch {
       // silent — user can retry
     } finally {
@@ -94,6 +92,13 @@ export function LessonsScreen({ onOpenLesson, learnLang = 'English' }: Props) {
       isStartingRef.current = false;
     }
   }
+
+  function handleTabPress(catId: string) {
+    setActiveCategoryId(catId);
+    const y = sectionYs.current[catId];
+    if (y !== undefined) scrollRef.current?.scrollTo({ y, animated: true });
+  }
+
 
   if (loadingCategories) {
     return <View style={styles.center}><ActivityIndicator color={C.BLUE} size="large" /></View>;

@@ -3,13 +3,16 @@ import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 import { useAuth } from '../context/AuthContext';
+import { LessonDetail } from '../services/api';
 import { LoginScreen } from '../screens/LoginScreen';
 import { MainScreen } from '../screens/MainScreen';
+import { ChapterListScreen } from '../screens/ChapterListScreen';
 import { C } from '../theme';
 
 export type RootStackParamList = {
   Login: undefined;
   Main: undefined;
+  ChapterList: { lesson: LessonDetail };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -37,7 +40,10 @@ export function AppNavigator() {
   return (
     <Stack.Navigator screenOptions={screenOptions}>
       {user ? (
-        <Stack.Screen name="Main" component={MainScreen} options={{ headerShown: false }} />
+        <>
+          <Stack.Screen name="Main" component={MainScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="ChapterList" component={ChapterListScreen} options={{ headerShown: false }} />
+        </>
       ) : (
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
       )}

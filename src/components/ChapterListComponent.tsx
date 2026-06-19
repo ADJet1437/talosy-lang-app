@@ -11,57 +11,30 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { LessonDetail, LessonChapter, LessonItem, completeLessonItem } from '../services/api';
+import { LessonDetail, LessonItem, completeLessonItem } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ItemPracticeSheet } from './ItemPracticeSheet';
 import { C } from '../theme';
-
-function chapterProgress(
-  chapter: LessonChapter,
-  extra: Set<string>,
-): { done: number; total: number; allDone: boolean } {
-  const total = chapter.items.length;
-  const done  = chapter.items.filter((item) => item.completed || extra.has(item.id)).length;
-  return { done, total, allDone: done === total };
-}
 
 type Props = {
   visible: boolean;
   lesson: LessonDetail | null;
   onClose: () => void;
-  onLessonProgressUpdate?: (lessonId: string) => void;
 };
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
-export function ChapterListComponent({ visible, lesson, onClose, onLessonProgressUpdate }: Props) {
+export function ChapterListComponent({ visible, lesson, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
-  const [modalVisible,  setModalVisible]  = useState(false);
-  const [activeItem,    setActiveItem]    = useState<LessonItem | null>(null);
-  const [practiceOpen,  setPracticeOpen]  = useState(false);
-  const [extraUnlocked, setExtraUnlocked] = useState<Set<string>>(new Set());
-
-  function isDone(item: LessonItem) {
-    return item.completed || extraUnlocked.has(item.id);
-  }
-
-  function openPractice(item: LessonItem) {
-    setActiveItem(item);
-    setPracticeOpen(true);
-  }
-
-  function handleUnlock(itemId: string) {
-    setExtraUnlocked((prev) => new Set([...prev, itemId]));
-    if (token) {
-      completeLessonItem(token, itemId).catch(() => {});
-    }
-  }
+  const [modalVisible, setModalVisible] = useState(false);
+  const [practiceItem, setPracticeItem] = useState<LessonItem | null>(null);
+  const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (visible) {
-      setExtraUnlocked(new Set());
+      setDoneIds(new Set());
       setModalVisible(true);
       Animated.spring(slideAnim, {
         toValue: 0,
@@ -81,99 +54,107 @@ export function ChapterListComponent({ visible, lesson, onClose, onLessonProgres
     }
   }, [visible, lesson?.id]);
 
+  function handleItemDone(itemId: string) {
+    setDoneIds((prev) => new Set([...prev, itemId]));
+    if (token) completeLessonItem(token, itemId).catch(() => {});
+    setPracticeItem(null);
+  }
+
   return (
-    <Modal visible={modalVisible} transparent animationType="none" onRequestClose={onClose}>
-      <Animated.View
-        style={[styles.screen, { transform: [{ translateX: slideAnim }] }]}
-        pointerEvents={visible ? 'auto' : 'none'}
+    <>
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="none"
+        onRequestClose={onClose}
       >
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <View style={styles.headerTop}>
-          <TouchableOpacity onPress={onClose} style={styles.backBtn} activeOpacity={0.7}>
-            <Text style={styles.backIcon}>‹</Text>
-            <Text style={styles.backLabel}>Back</Text>
-          </TouchableOpacity>
-          {lesson && (
-            <View style={[
-              styles.badge,
-              lesson.difficulty === 'beginner' ? styles.badgeBeginner : styles.badgeIntermediate,
-            ]}>
-              <Text style={[
-                styles.badgeText,
-                lesson.difficulty === 'beginner' ? styles.badgeBeginnerText : styles.badgeIntermediateText,
-              ]}>
-                {lesson.difficulty}
-              </Text>
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: C.BG_BASE }]}>
+          <Animated.View
+            style={[styles.screen, { transform: [{ translateX: slideAnim }] }]}
+            pointerEvents={visible ? 'auto' : 'none'}
+          >
+            {/* Header */}
+            <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+              <TouchableOpacity onPress={onClose} style={styles.backBtn} activeOpacity={0.7}>
+                <Text style={styles.backChevron}>‹</Text>
+                <Text style={styles.backLabel}>Back</Text>
+              </TouchableOpacity>
+              <Text style={styles.headerTitle} numberOfLines={1}>{lesson?.title ?? ''}</Text>
+              {lesson && (
+                <View style={[
+                  styles.diffBadge,
+                  lesson.difficulty === 'beginner' ? styles.badgeBeginner : styles.badgeIntermediate,
+                ]}>
+                  <Text style={[
+                    styles.diffBadgeText,
+                    lesson.difficulty === 'beginner' ? styles.badgeBeginnerText : styles.badgeIntermediateText,
+                  ]}>
+                    {lesson.difficulty}
+                  </Text>
+                </View>
+              )}
             </View>
-          )}
-        </View>
-        <Text style={styles.title}>{lesson?.title ?? ''}</Text>
-      </View>
 
-      {/* Content */}
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {lesson?.chapters.map((chapter) => {
-          const { done, total, allDone } = chapterProgress(chapter, extraUnlocked);
-          return (
-            <View key={chapter.number} style={styles.chapter}>
+            {/* Chapter list */}
+            <ScrollView
+              style={styles.scroll}
+              contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
+              showsVerticalScrollIndicator={false}
+            >
+              {lesson?.chapters.map((chapter) => {
+                const total = chapter.items.length;
+                const done = chapter.items.filter((i) => i.completed || doneIds.has(i.id)).length;
+                const allDone = done === total;
 
-              <View style={styles.chapterHeader}>
-                <Text style={styles.chapterNumber}>
-                  {String(chapter.number).padStart(2, '0')}
-                </Text>
-                <Text style={styles.chapterTitle}>{chapter.title}</Text>
-
-                {allDone ? (
-                  <TouchableOpacity style={styles.unlockBtn} activeOpacity={0.75}>
-                    <Text style={styles.unlockStar}>✦</Text>
-                    <Text style={styles.unlockLabel}>Practice</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={styles.lockBadge}>
-                    <Text style={styles.lockCount}>{done}/{total}</Text>
-                    <Text style={styles.lockIcon}>🔒</Text>
-                  </View>
-                )}
-              </View>
-
-              {chapter.items.map((item, idx) => {
-                const done = isDone(item);
                 return (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={styles.item}
-                    onPress={() => openPractice(item)}
-                    activeOpacity={0.6}
-                  >
-                    <Text style={styles.itemNumber}>
-                      {String(idx + 1).padStart(2, '0')}
-                    </Text>
-                    <Text style={[styles.itemSentence, done && styles.itemSentenceDone]}>
-                      {item.sentence}
-                    </Text>
-                    {done && <Text style={styles.checkMark}>✓</Text>}
-                  </TouchableOpacity>
+                  <View key={chapter.number} style={styles.chapter}>
+                    {/* Chapter header */}
+                    <View style={styles.chapterHeader}>
+                      <View style={styles.chapterNumBadge}>
+                        <Text style={styles.chapterNumText}>
+                          {String(chapter.number).padStart(2, '0')}
+                        </Text>
+                      </View>
+                      <Text style={styles.chapterTitle}>{chapter.title}</Text>
+                      <Text style={[styles.chapterProgress, allDone && styles.chapterProgressDone]}>
+                        {allDone ? '✓' : `${done}/${total}`}
+                      </Text>
+                    </View>
+
+                    {/* Items */}
+                    {chapter.items.map((item, idx) => {
+                      const isDone = item.completed || doneIds.has(item.id);
+                      return (
+                        <TouchableOpacity
+                          key={item.id}
+                          style={styles.item}
+                          onPress={() => setPracticeItem(item)}
+                          activeOpacity={0.6}
+                        >
+                          <Text style={styles.itemIdx}>
+                            {String(idx + 1).padStart(2, '0')}
+                          </Text>
+                          <Text style={[styles.itemText, isDone && styles.itemTextDone]}>
+                            {item.sentence}
+                          </Text>
+                          {isDone && <Text style={styles.itemCheck}>✓</Text>}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 );
               })}
-
-            </View>
-          );
-        })}
-      </ScrollView>
+            </ScrollView>
+          </Animated.View>
+        </View>
+      </Modal>
 
       <ItemPracticeSheet
-        visible={practiceOpen}
-        item={activeItem}
-        onClose={() => setPracticeOpen(false)}
-        onUnlock={handleUnlock}
+        item={practiceItem}
+        onClose={() => setPracticeItem(null)}
+        onDone={handleItemDone}
       />
-    </Animated.View>
-    </Modal>
+    </>
   );
 }
 
@@ -181,80 +162,64 @@ const styles = StyleSheet.create({
   screen: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: C.BG_BASE,
+    flexDirection: 'column',
   },
 
   // ── Header ────────────────────────────────────────────────────────────────
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
     backgroundColor: C.BG_SURFACE,
     borderBottomWidth: 1,
     borderBottomColor: C.BORDER_DEFAULT,
-    paddingHorizontal: 20,
-    paddingBottom: 14,
-    gap: 6,
   },
-  headerTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backBtn:   { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  backIcon:  { color: C.BLUE, fontSize: 28, lineHeight: 32, fontWeight: '300' },
-  backLabel: { color: C.BLUE, fontSize: 15, fontWeight: '600' },
+  backBtn:     { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  backChevron: { color: C.BLUE, fontSize: 28, lineHeight: 32, fontWeight: '300' },
+  backLabel:   { color: C.BLUE, fontSize: 15, fontWeight: '600' },
+  headerTitle: { flex: 1, color: C.TEXT_PRIMARY, fontSize: 16, fontWeight: '700' },
+  diffBadge:          { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeBeginner:      { backgroundColor: C.BADGE_BEGINNER_BG },
+  badgeIntermediate:  { backgroundColor: C.BADGE_INTERMEDIATE_BG },
+  diffBadgeText:          { fontSize: 11, fontWeight: '700' },
+  badgeBeginnerText:      { color: C.BADGE_BEGINNER_TEXT },
+  badgeIntermediateText:  { color: C.BADGE_INTERMEDIATE_TEXT },
 
-  badge:                 { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeBeginner:         { backgroundColor: C.BADGE_BEGINNER_BG },
-  badgeIntermediate:     { backgroundColor: C.BADGE_INTERMEDIATE_BG },
-  badgeText:             { fontSize: 11, fontWeight: '700' },
-  badgeBeginnerText:     { color: C.BADGE_BEGINNER_TEXT },
-  badgeIntermediateText: { color: C.BADGE_INTERMEDIATE_TEXT },
+  // ── Scroll ────────────────────────────────────────────────────────────────
+  scroll:        { flex: 1 },
+  scrollContent: { padding: 20, gap: 28 },
 
-  title: { color: C.TEXT_PRIMARY, fontSize: 20, fontWeight: '700', lineHeight: 26 },
-
-  // ── Chapters ──────────────────────────────────────────────────────────────
-  scroll:   { flex: 1 },
-  content:  { padding: 20, gap: 28 },
-  chapter:  { gap: 12 },
-
+  // ── Chapter ───────────────────────────────────────────────────────────────
+  chapter: { gap: 10 },
   chapterHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingBottom: 8,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: C.BORDER_DEFAULT,
   },
-  chapterNumber: { color: C.BLUE, fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  chapterTitle:  { color: C.BLUE, fontSize: 13, fontWeight: '700', letterSpacing: 0.2, flex: 1 },
+  chapterNumBadge: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: C.BLUE,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  chapterNumText:      { color: '#fff', fontSize: 11, fontWeight: '800' },
+  chapterTitle:        { flex: 1, color: C.TEXT_PRIMARY, fontSize: 14, fontWeight: '700' },
+  chapterProgress:     { color: C.TEXT_MUTED, fontSize: 12, fontWeight: '700' },
+  chapterProgressDone: { color: C.GREEN },
 
-  // ── Chapter indicator ─────────────────────────────────────────────────────
-  lockBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  lockCount: { color: C.TEXT_MUTED, fontSize: 11, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  lockIcon:  { fontSize: 13 },
-
-  unlockBtn: {
+  // ── Item ──────────────────────────────────────────────────────────────────
+  item: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: C.TEXT_PRIMARY,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    gap: 12,
+    paddingVertical: 6,
   },
-  unlockStar:  { color: C.GOLD, fontSize: 12 },
-  unlockLabel: { color: C.BG_BASE, fontSize: 11, fontWeight: '700' },
-
-  // ── Items ─────────────────────────────────────────────────────────────────
-  item: { flexDirection: 'row', gap: 14, alignItems: 'center' },
-
-  itemNumber: {
-    color: C.TEXT_MUTED,
-    fontSize: 12,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-    minWidth: 20,
-  },
-  itemSentence:     { color: C.TEXT_PRIMARY, fontSize: 15, lineHeight: 24, flex: 1 },
-  itemSentenceDone: { color: C.TEXT_MUTED },
-
-  checkMark: { color: C.GREEN, fontSize: 14, fontWeight: '800', flexShrink: 0 },
+  itemIdx:      { color: C.TEXT_MUTED, fontSize: 12, fontWeight: '700', minWidth: 20 },
+  itemText:     { flex: 1, color: C.TEXT_PRIMARY, fontSize: 15, lineHeight: 22 },
+  itemTextDone: { color: C.TEXT_MUTED },
+  itemCheck:    { color: C.GREEN, fontSize: 14, fontWeight: '800' },
 });
