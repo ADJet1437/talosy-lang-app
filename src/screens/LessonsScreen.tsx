@@ -24,6 +24,7 @@ import { C } from '../theme';
 
 type Props = {
   learnLang?: string;
+  nativeLang?: string;
 };
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -56,7 +57,7 @@ function realState(lesson: LessonSummary): { state: NodeState; dots: number } {
   return { state: 'active', dots };
 }
 
-export function LessonsScreen({ learnLang = 'English' }: Props) {
+export function LessonsScreen({ learnLang = 'English', nativeLang = 'English' }: Props) {
   const navigation = useNavigation<Nav>();
   const { token } = useAuth();
   const [categories,        setCategories]        = useState<LessonCategory[]>([]);
@@ -84,7 +85,7 @@ export function LessonsScreen({ learnLang = 'English' }: Props) {
     setStarting(lesson.id);
     try {
       const detail = await fetchLessonDetail(lesson.id, langCode(learnLang), token);
-      navigation.navigate('ChapterList', { lesson: detail });
+      navigation.navigate('ChapterList', { lesson: detail, learnLang, nativeLang });
     } catch {
       // silent — user can retry
     } finally {

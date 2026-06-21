@@ -14,7 +14,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ChapterList'>;
 type PracticeContext = { items: LessonItem[]; startIndex: number };
 
 export function ChapterListScreen({ route, navigation }: Props) {
-  const { lesson } = route.params;
+  const { lesson, learnLang = 'English', nativeLang = 'English' } = route.params;
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const [practiceCtx, setPracticeCtx] = useState<PracticeContext | null>(null);
@@ -35,7 +35,12 @@ export function ChapterListScreen({ route, navigation }: Props) {
 
   function handlePracticeInChat(chapter: LessonChapter) {
     const sentences = chapter.items.filter(isItemDone).map((i) => i.sentence);
-    navigation.navigate('Main', { chatTopic: lesson.title, chatSentences: sentences });
+    navigation.navigate('LessonCall', {
+      topic: lesson.title,
+      sentences,
+      language: learnLang,
+      nativeLanguage: nativeLang,
+    });
   }
 
   return (

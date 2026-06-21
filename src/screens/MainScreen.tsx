@@ -101,8 +101,7 @@ export function MainScreen({ route, navigation }: Props) {
   const sessionLangRef = useRef({ lang: language, nativeLang: nativeLanguage });
 
   const wsRef                    = useRef<TalkosWS | null>(null);
-  const pendingPracticeLessonRef = useRef<{ text: string; sentences?: string[] } | null>(null);
-  const sessionIdRef         = useRef<string | null>(null);
+const sessionIdRef         = useRef<string | null>(null);
   const scrollRef            = useRef<ScrollView>(null);
   const onFinishRef          = useRef<(() => void) | null>(null);
   const isActiveRef          = useRef(false);
@@ -202,22 +201,6 @@ export function MainScreen({ route, navigation }: Props) {
       .finally(() => setLangLoaded(true));
   }, []);
 
-  // ─── Chat topic from lesson ───────────────────────────────────────────────
-
-  useEffect(() => {
-    const topic = route.params?.chatTopic;
-    if (!topic) return;
-    setActiveTab('chat');
-    const sentences = route.params?.chatSentences;
-    addMessage('user', `Let's practice: ${topic}`);
-    setIsAILoading(true);
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.sendPracticeLesson(topic, sentences);
-    } else {
-      // WS still connecting or was dropped — flush when onReady fires
-      pendingPracticeLessonRef.current = { text: topic, sentences };
-    }
-  }, [route.params?.chatTopic]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Streak ───────────────────────────────────────────────────────────────
 
@@ -374,11 +357,6 @@ export function MainScreen({ route, navigation }: Props) {
 
         const ws = new TalkosWS(sessionId, sessionLang, sessionNativeLang, {
           onReady: () => {
-            const pending = pendingPracticeLessonRef.current;
-            if (pending) {
-              pendingPracticeLessonRef.current = null;
-              ws.sendPracticeLesson(pending.text, pending.sentences);
-            }
             if (isImmersiveRef.current) enterListening();
             else setAppState('paused');
           },
@@ -581,7 +559,7 @@ export function MainScreen({ route, navigation }: Props) {
     <View style={styles.container}>
 
       {/* Header — hidden on Profile tab which has its own */}
-      {activeTab !== 'me' && (
+      {activeTab !== 'me' && activeTab !== 'lessons' && (
         <View style={styles.header}>
           <View style={styles.headerLangTag}>
             <Text style={styles.headerLangFlag}>{LANG_FLAG[language] ?? '🌐'}</Text>
@@ -632,7 +610,7 @@ export function MainScreen({ route, navigation }: Props) {
       </View>
 
       <View style={[styles.tabContent, activeTab !== 'lessons' && styles.tabHidden]}>
-        <LessonsScreen learnLang={language} />
+        <LessonsScreen learnLang={language} nativeLang={nativeLanguage} />
       </View>
 
       <View style={[styles.tabContent, activeTab !== 'me' && styles.tabHidden]}>
