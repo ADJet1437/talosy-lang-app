@@ -11,10 +11,15 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useAuth } from '../context/AuthContext';
 import { ConversationGrowthChart } from './ConversationGrowthChart';
+import { RootStackParamList } from '../navigation/AppNavigator';
 import { C } from '../theme';
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 const LANGUAGES = ['English', 'Swedish', 'Chinese'];
 
@@ -43,6 +48,7 @@ export function ProfileTab({
   longestStreak,
 }: Props) {
   const { user, token, signOut } = useAuth();
+  const navigation = useNavigation<Nav>();
 
   const gap         = longestStreak - currentStreak;
   const progressPct = longestStreak > 0 ? Math.min(currentStreak / longestStreak, 1) : 1;
@@ -142,7 +148,6 @@ export function ProfileTab({
 
         {/* ── Languages ──────────────────────────────────────────────────── */}
         <Text style={styles.section}>Languages</Text>
-        <Text style={styles.langNote}>Changes take effect on the next session</Text>
         <View style={styles.card}>
           <TouchableOpacity style={styles.row} onPress={() => openLang('learn')} activeOpacity={0.7}>
             <Text style={styles.rowLabel}>I want to practice</Text>
@@ -162,6 +167,19 @@ export function ProfileTab({
         </View>
 
         {/* ── About ──────────────────────────────────────────────────────── */}
+        {/* ── History ────────────────────────────────────────────────────── */}
+        <Text style={styles.section}>History</Text>
+        <View style={styles.card}>
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => navigation.navigate('ConversationHistory')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.rowLabel}>Conversation history</Text>
+            <Text style={styles.rowChevron}>›</Text>
+          </TouchableOpacity>
+        </View>
+
         <Text style={styles.section}>About</Text>
         <View style={styles.card}>
           <View style={styles.row}>
@@ -286,10 +304,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8, textTransform: 'uppercase',
     marginTop: 12, marginBottom: 4, paddingHorizontal: 4,
   },
-  langNote: {
-    color: C.TEXT_MUTED, fontSize: 11,
-    paddingHorizontal: 4, marginBottom: 4, marginTop: -4,
-  },
   card: {
     backgroundColor: C.BG_SURFACE,
     borderRadius: 14,
@@ -303,7 +317,8 @@ const styles = StyleSheet.create({
   },
   rowLeft:  { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   rowIcon:  { fontSize: 20 },
-  rowLabel: { color: C.TEXT_PRIMARY, fontSize: 15, fontWeight: '500' },
+  rowLabel:   { color: C.TEXT_PRIMARY, fontSize: 15, fontWeight: '500' },
+  rowChevron: { color: C.TEXT_MUTED, fontSize: 20, fontWeight: '300' },
   rowSub:   { color: C.TEXT_MUTED, fontSize: 12, marginTop: 2 },
   rowValue: { color: C.TEXT_SECONDARY, fontSize: 14 },
 

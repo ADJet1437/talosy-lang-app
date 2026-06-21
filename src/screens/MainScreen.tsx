@@ -6,6 +6,7 @@ import {
   useAudioRecorder,
 } from 'expo-audio';
 import * as FileSystem from 'expo-file-system/legacy';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -22,7 +23,7 @@ import {
 
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { C } from '../theme';
-import { TalkosWS, createSession, fetchStreak, fetchTTSBase64 } from '../services/api';
+import { TalkosWS, createSession, fetchConversationMessages, fetchStreak, fetchTTSBase64 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ChatTab, AppState, Message } from '../components/ChatTab';
 import { ProfileTab } from '../components/ProfileTab';
@@ -62,12 +63,13 @@ const EQ_CYCLE_MS          = 900;
 const EQ_MIN_H             = 3;
 const EQ_MAX_H             = 22;
 
-export function MainScreen({ navigation }: Props) {
+export function MainScreen({ route, navigation }: Props) {
   const { token } = useAuth();
 
   // ─── State ────────────────────────────────────────────────────────────────
   const [language, setLanguage]                   = useState('English');
   const [nativeLanguage, setNativeLanguage]       = useState('English');
+  const [langLoaded, setLangLoaded]               = useState(false);
   const [appState, setAppState]                   = useState<AppState>('setup');
   const [messages, setMessages]                   = useState<Message[]>([]);
   const [streamingText, setStreamingText]         = useState('');
@@ -78,12 +80,25 @@ export function MainScreen({ navigation }: Props) {
   const [activeTab, setActiveTab]                 = useState<ActiveTab>('chat');
   const [isImmersive, setIsImmersive]             = useState(false);
   const [isManualRecording, setIsManualRecording] = useState(false);
+  const [sessionKey, setSessionKey]               = useState(0);
+
+  // Consumed once by the first session setup effect; null on all subsequent runs
+  const resumeOnceRef = useRef<{ sessionId: string; lang?: string; nativeLang?: string } | null>(
+    route.params?.resumeSessionId
+      ? { sessionId: route.params.resumeSessionId, lang: route.params.resumeLanguage, nativeLang: route.params.resumeNativeLanguage }
+      : null
+  );
   const [streakOpen, setStreakOpen]               = useState(false);
   const [streak, setStreak]                       = useState<{ current: number; longest: number; activeDays: Set<string> }>({
     current: 0, longest: 0, activeDays: new Set(),
   });
 
   // ─── Refs ─────────────────────────────────────────────────────────────────
+  // Holds the language intended for the NEXT session. Updated synchronously
+  // in the language-change handler so the session setup effect always reads
+  // the correct value regardless of React batching timing.
+  const sessionLangRef = useRef({ lang: language, nativeLang: nativeLanguage });
+
   const wsRef                = useRef<TalkosWS | null>(null);
   const sessionIdRef         = useRef<string | null>(null);
   const scrollRef            = useRef<ScrollView>(null);
@@ -172,6 +187,29 @@ export function MainScreen({ navigation }: Props) {
   useEffect(() => {
     setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
   }, []);
+
+  // ─── Persist & restore language preferences ───────────────────────────────
+
+  useEffect(() => {
+    AsyncStorage.multiGet(['@lang', '@nativeLang'])
+      .then(([[, lang], [, nativeLang]]) => {
+        if (lang)       { sessionLangRef.current.lang       = lang;       setLanguage(lang); }
+        if (nativeLang) { sessionLangRef.current.nativeLang = nativeLang; setNativeLanguage(nativeLang); }
+      })
+      .catch(() => {})
+      .finally(() => setLangLoaded(true));
+  }, []);
+
+  // ─── Chat topic from lesson ───────────────────────────────────────────────
+
+  useEffect(() => {
+    const topic = route.params?.chatTopic;
+    if (!topic) return;
+    setActiveTab('chat');
+    const sentences = route.params?.chatSentences;
+    const t = setTimeout(() => wsRef.current?.sendSetTopic(topic, sentences), 300);
+    return () => clearTimeout(t);
+  }, [route.params?.chatTopic]);
 
   // ─── Streak ───────────────────────────────────────────────────────────────
 
@@ -285,45 +323,81 @@ export function MainScreen({ navigation }: Props) {
   // ─── Session setup ────────────────────────────────────────────────────────
 
   useEffect(() => {
+    if (!langLoaded) return;  // wait for persisted language to be restored first
+
     let cancelled = false;
 
-    createSession(language, nativeLanguage, token).then((sessionId) => {
-      if (cancelled) return;
-      sessionIdRef.current = sessionId;
-      setAppState('connecting');
+    // Consume resume params exactly once; subsequent sessionKey bumps start fresh
+    const resume = resumeOnceRef.current;
+    resumeOnceRef.current = null;
 
-      const ws = new TalkosWS(sessionId, language, nativeLanguage, {
-        onReady: () => {
-          if (isImmersiveRef.current) enterListening();
-          else setAppState('paused');
-        },
-        onTranscript: (text) => addMessage('user', text),
-        onNoSpeech: () => { if (!isPausedRef.current && isImmersiveRef.current) enterListening(); },
-        onAIResponse: (text, audio, translation, sug) => {
-          if (!text || !audio) return;
-          suggestionPlayerRef.current?.pause?.();
-          setSuggestionPlaying(false);
-          setSuggestion('');
-          startTextStream(text);
-          setAppState('ai_speaking');
-          playAudio(audio, () => {
-            addMessage('ai', text, translation);
-            flushStreaming();
-            if (sug) setSuggestion(sug);
-            if (!isPausedRef.current && isImmersiveRef.current) enterListening();
+    async function setup() {
+      try {
+        let sessionId: string;
+        let sessionLang = language;
+        let sessionNativeLang = nativeLanguage;
+
+        if (resume) {
+          sessionId = resume.sessionId;
+          if (resume.lang)       { setLanguage(resume.lang);             sessionLang       = resume.lang; }
+          if (resume.nativeLang) { setNativeLanguage(resume.nativeLang); sessionNativeLang = resume.nativeLang; }
+          if (token) {
+            const existing = await fetchConversationMessages(sessionId, token);
+            if (!cancelled) {
+              setMessages(existing.map((m) => ({
+                role: m.role === 'user' ? ('user' as const) : ('ai' as const),
+                text: m.text,
+              })));
+            }
+          }
+        } else {
+          // Read from ref — it's updated synchronously before handleNewSession() fires,
+          // so it always holds the correct language even if React hasn't committed the
+          // state update to the closure yet.
+          sessionLang       = sessionLangRef.current.lang;
+          sessionNativeLang = sessionLangRef.current.nativeLang;
+          sessionId = await createSession(sessionLang, sessionNativeLang, token);
+        }
+
+        if (cancelled) return;
+        sessionIdRef.current = sessionId;
+        setAppState('connecting');
+
+        const ws = new TalkosWS(sessionId, sessionLang, sessionNativeLang, {
+          onReady: () => {
+            if (isImmersiveRef.current) enterListening();
             else setAppState('paused');
-          });
-        },
-        onSessionEnd: () => { navigation.replace('Main'); },
-        onError: (msg) => { Alert.alert('Connection error', msg); navigation.goBack(); },
-        onClose: () => {},
-      });
-      wsRef.current = ws;
-    }).catch((e) => {
-      console.error('[SETUP] createSession error:', e);
-      Alert.alert('Error', 'Could not start session. Is the server running?');
-      navigation.goBack();
-    });
+          },
+          onTranscript: (text) => addMessage('user', text),
+          onNoSpeech: () => { if (!isPausedRef.current && isImmersiveRef.current) enterListening(); },
+          onAIResponse: (text, audio, translation, sug) => {
+            if (!text || !audio) return;
+            suggestionPlayerRef.current?.pause?.();
+            setSuggestionPlaying(false);
+            setSuggestion('');
+            startTextStream(text);
+            setAppState('ai_speaking');
+            playAudio(audio, () => {
+              addMessage('ai', text, translation);
+              flushStreaming();
+              if (sug) setSuggestion(sug);
+              if (!isPausedRef.current && isImmersiveRef.current) enterListening();
+              else setAppState('paused');
+            });
+          },
+          onSessionEnd: () => { navigation.replace('Main'); },
+          onError: (msg) => { Alert.alert('Connection error', msg); navigation.goBack(); },
+          onClose: () => {},
+        });
+        wsRef.current = ws;
+      } catch (e) {
+        console.error('[SETUP] session setup error:', e);
+        Alert.alert('Error', 'Could not start session. Is the server running?');
+        navigation.goBack();
+      }
+    }
+
+    setup();
 
     return () => {
       cancelled = true;
@@ -334,7 +408,7 @@ export function MainScreen({ navigation }: Props) {
       try { recorder.stop().catch(() => {}); } catch {}
       wsRef.current?.close();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sessionKey, langLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Mode toggle ──────────────────────────────────────────────────────────
 
@@ -360,6 +434,28 @@ export function MainScreen({ navigation }: Props) {
       isPausedRef.current = true;
       setAppState('paused');
     }
+  }
+
+  // ─── New session ──────────────────────────────────────────────────────────
+
+  function handleNewSession() {
+    // Cancel any pending audio finish callback so it doesn't bleed into the new session
+    onFinishRef.current = null;
+    suggestionPlayerRef.current?.pause?.();
+    isPausedRef.current = true;
+    isImmersiveRef.current = false;
+    setIsImmersive(false);
+
+    // Clear conversation state before the effect re-runs
+    setMessages([]);
+    setSuggestion('');
+    setSuggestionPlaying(false);
+    flushStreaming();
+    setAppState('connecting');
+
+    // Bumping sessionKey triggers the useEffect cleanup (closes WS, stops recording)
+    // and immediately re-runs it to create a fresh session
+    setSessionKey((k) => k + 1);
   }
 
   // ─── Manual recording ─────────────────────────────────────────────────────
@@ -475,14 +571,25 @@ export function MainScreen({ navigation }: Props) {
             <Text style={styles.headerLangFlag}>{LANG_FLAG[language] ?? '🌐'}</Text>
             <Text style={styles.headerLangText}>{language}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.streakPill}
-            onPress={() => setStreakOpen(true)}
-            activeOpacity={0.75}
-          >
-            <Text style={styles.streakFlame}>🔥</Text>
-            <Text style={styles.streakCount}>{streak.current}</Text>
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              style={styles.streakPill}
+              onPress={() => setStreakOpen(true)}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.streakFlame}>🔥</Text>
+              <Text style={styles.streakCount}>{streak.current}</Text>
+            </TouchableOpacity>
+            {activeTab === 'chat' && (
+              <TouchableOpacity
+                style={styles.newSessionBtn}
+                onPress={handleNewSession}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="add" size={20} color={C.TEXT_PRIMARY} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       )}
 
@@ -516,8 +623,8 @@ export function MainScreen({ navigation }: Props) {
           isImmersive={isImmersive}
           learnLang={language}
           nativeLang={nativeLanguage}
-          onLearnLangChange={setLanguage}
-          onNativeLangChange={setNativeLanguage}
+          onLearnLangChange={(lang) => { sessionLangRef.current.lang = lang; setLanguage(lang); AsyncStorage.setItem('@lang', lang).catch(() => {}); handleNewSession(); }}
+          onNativeLangChange={(lang) => { sessionLangRef.current.nativeLang = lang; setNativeLanguage(lang); AsyncStorage.setItem('@nativeLang', lang).catch(() => {}); handleNewSession(); }}
           onToggleMode={toggleMode}
           currentStreak={streak.current}
           longestStreak={streak.longest}
@@ -585,6 +692,15 @@ const styles = StyleSheet.create({
   },
   headerLangFlag: { fontSize: 18 },
   headerLangText: { color: C.TEXT_SECONDARY, fontSize: 13, fontWeight: '600' },
+
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+
+  newSessionBtn: {
+    width: 32, height: 32,
+    borderRadius: 16,
+    backgroundColor: C.BG_ELEVATED,
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   streakPill:  {
     flexDirection: 'row', alignItems: 'center', gap: 4,

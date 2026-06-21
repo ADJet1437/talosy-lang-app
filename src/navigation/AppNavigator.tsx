@@ -3,16 +3,20 @@ import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 import { useAuth } from '../context/AuthContext';
-import { LessonDetail } from '../services/api';
+import { ConversationSummary, LessonDetail } from '../services/api';
 import { LoginScreen } from '../screens/LoginScreen';
 import { MainScreen } from '../screens/MainScreen';
 import { ChapterListScreen } from '../screens/ChapterListScreen';
+import { ConversationHistoryScreen } from '../screens/ConversationHistoryScreen';
+import { ConversationDetailScreen } from '../screens/ConversationDetailScreen';
 import { C } from '../theme';
 
 export type RootStackParamList = {
   Login: undefined;
-  Main: undefined;
+  Main: { chatTopic?: string; chatSentences?: string[]; resumeSessionId?: string; resumeLanguage?: string; resumeNativeLanguage?: string } | undefined;
   ChapterList: { lesson: LessonDetail };
+  ConversationHistory: undefined;
+  ConversationDetail: { session: ConversationSummary };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -43,6 +47,8 @@ export function AppNavigator() {
         <>
           <Stack.Screen name="Main" component={MainScreen} options={{ headerShown: false }} />
           <Stack.Screen name="ChapterList" component={ChapterListScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="ConversationHistory" component={ConversationHistoryScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="ConversationDetail" component={ConversationDetailScreen} options={{ headerShown: false }} />
         </>
       ) : (
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />

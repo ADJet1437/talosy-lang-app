@@ -4,24 +4,38 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { LessonItem, completeLessonItem } from '../services/api';
+import { LessonChapter, LessonItem, completeLessonItem } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { ItemPracticeSheet } from '../components/ItemPracticeSheet';
+import { SentencePracticeSheet } from '../components/SentencePracticeSheet';
 import { C } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ChapterList'>;
+
+type PracticeContext = { items: LessonItem[]; startIndex: number };
 
 export function ChapterListScreen({ route, navigation }: Props) {
   const { lesson } = route.params;
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
-  const [practiceItem, setPracticeItem] = useState<LessonItem | null>(null);
+  const [practiceCtx, setPracticeCtx] = useState<PracticeContext | null>(null);
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+
+  function isItemDone(item: LessonItem) {
+    return item.completed || doneIds.has(item.id);
+  }
+
+  function isChapterDone(chapter: LessonChapter) {
+    return chapter.items.length > 0 && chapter.items.every(isItemDone);
+  }
 
   function handleItemDone(itemId: string) {
     setDoneIds((prev) => new Set([...prev, itemId]));
     if (token) completeLessonItem(token, itemId).catch(() => {});
-    setPracticeItem(null);
+  }
+
+  function handlePracticeInChat(chapter: LessonChapter) {
+    const sentences = chapter.items.filter(isItemDone).map((i) => i.sentence);
+    navigation.navigate('Main', { chatTopic: lesson.title, chatSentences: sentences });
   }
 
   return (
@@ -55,8 +69,8 @@ export function ChapterListScreen({ route, navigation }: Props) {
         >
           {lesson.chapters.map((chapter) => {
             const total = chapter.items.length;
-            const done = chapter.items.filter((i) => i.completed || doneIds.has(i.id)).length;
-            const allDone = done === total && total > 0;
+            const done = chapter.items.filter(isItemDone).length;
+            const chapterDone = isChapterDone(chapter);
 
             return (
               <View key={chapter.number} style={styles.chapter}>
@@ -67,18 +81,18 @@ export function ChapterListScreen({ route, navigation }: Props) {
                     </Text>
                   </View>
                   <Text style={styles.chapterTitle}>{chapter.title}</Text>
-                  <Text style={[styles.chapterProgress, allDone && styles.chapterProgressDone]}>
-                    {allDone ? '✓' : `${done}/${total}`}
+                  <Text style={[styles.chapterProgress, chapterDone && styles.chapterProgressDone]}>
+                    {chapterDone ? '✓' : `${done}/${total}`}
                   </Text>
                 </View>
 
                 {chapter.items.map((item, idx) => {
-                  const isDone = item.completed || doneIds.has(item.id);
+                  const isDone = isItemDone(item);
                   return (
                     <TouchableOpacity
                       key={item.id}
                       style={styles.item}
-                      onPress={() => setPracticeItem(item)}
+                      onPress={() => setPracticeCtx({ items: chapter.items, startIndex: idx })}
                       activeOpacity={0.6}
                     >
                       <Text style={styles.itemIdx}>{String(idx + 1).padStart(2, '0')}</Text>
@@ -87,15 +101,36 @@ export function ChapterListScreen({ route, navigation }: Props) {
                     </TouchableOpacity>
                   );
                 })}
+
+                {/* Chapter completion banner */}
+                {chapterDone && (
+                  <View style={styles.completionBanner}>
+                    <Text style={styles.completionEmoji}>🎉</Text>
+                    <View style={styles.completionText}>
+                      <Text style={styles.completionTitle}>Chapter complete!</Text>
+                      <Text style={styles.completionSub}>Practice what you learned in a conversation</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.chatBtn}
+                      onPress={() => handlePracticeInChat(chapter)}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={styles.chatBtnText}>Chat →</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             );
           })}
         </ScrollView>
       </View>
 
-      <ItemPracticeSheet
-        item={practiceItem}
-        onClose={() => setPracticeItem(null)}
+      <SentencePracticeSheet
+        items={practiceCtx?.items ?? []}
+        startIndex={practiceCtx?.startIndex ?? 0}
+        visible={practiceCtx !== null}
+        doneIds={doneIds}
+        onClose={() => setPracticeCtx(null)}
         onDone={handleItemDone}
       />
     </>
@@ -167,4 +202,28 @@ const styles = StyleSheet.create({
   itemText:     { flex: 1, color: C.TEXT_PRIMARY, fontSize: 15, lineHeight: 22 },
   itemTextDone: { color: C.TEXT_MUTED },
   itemCheck:    { color: C.GREEN, fontSize: 14, fontWeight: '800' },
+
+  // ── Chapter completion banner ────────────────────────────────────────────────
+  completionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 8,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: C.BG_ELEVATED,
+    borderWidth: 1,
+    borderColor: C.GREEN,
+  },
+  completionEmoji: { fontSize: 22 },
+  completionText:  { flex: 1, gap: 2 },
+  completionTitle: { color: C.TEXT_PRIMARY, fontSize: 13, fontWeight: '700' },
+  completionSub:   { color: C.TEXT_MUTED, fontSize: 11 },
+  chatBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: C.BLUE,
+  },
+  chatBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 });

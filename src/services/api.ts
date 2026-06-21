@@ -87,6 +87,46 @@ export type WordLookupResult = {
 };
 
 
+// Conversation history
+export type ConversationSummary = {
+  id: string;
+  language: string;
+  native_language: string;
+  exchange_count: number;
+  level_detected: string | null;
+  started_at: string;
+};
+
+export type ConversationMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  created_at: string;
+};
+
+export async function fetchConversationHistory(token: string): Promise<ConversationSummary[]> {
+  const res = await fetch(`${BASE_URL}/talkos/sessions`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Failed to fetch history');
+  return res.json();
+}
+
+export async function fetchConversationMessages(sessionId: string, token: string): Promise<ConversationMessage[]> {
+  const res = await fetch(`${BASE_URL}/talkos/sessions/${sessionId}/messages`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Failed to fetch messages');
+  return res.json();
+}
+
+export async function deleteConversation(sessionId: string, token: string): Promise<void> {
+  await fetch(`${BASE_URL}/talkos/sessions/${sessionId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export type WSIncoming =
   | { type: 'ready' }
   | { type: 'transcript'; text: string }
@@ -253,8 +293,8 @@ export class TalkosWS {
     this.ws.send(JSON.stringify({ type: 'speech', data: base64Audio }));
   }
 
-  sendSetTopic(text: string) {
-    this.ws.send(JSON.stringify({ type: 'set_topic', text }));
+  sendSetTopic(text: string, sentences?: string[]) {
+    this.ws.send(JSON.stringify({ type: 'set_topic', text, sentences }));
   }
 
   endSession() {

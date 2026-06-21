@@ -50,14 +50,23 @@ export function WordSheet({ visible, word, context, targetLanguage, nativeLangua
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <View style={styles.overlay} pointerEvents="box-none">
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
 
         <Animated.View style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}>
-          <Text style={styles.word}>{word}</Text>
-          {result?.pronunciation ? (
-            <Text style={styles.pronunciation}>{result.pronunciation}</Text>
-          ) : null}
+          <View style={styles.handle} />
+
+          <View style={styles.header}>
+            <View style={styles.headerText}>
+              <Text style={styles.word}>{word}</Text>
+              {result?.pronunciation ? (
+                <Text style={styles.pronunciation}>{result.pronunciation}</Text>
+              ) : null}
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Text style={styles.closeIcon}>✕</Text>
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.divider} />
 
@@ -101,8 +110,19 @@ const styles = StyleSheet.create({
     padding: 24,
   },
 
+  handle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: C.BORDER_DEFAULT,
+    alignSelf: 'center', marginBottom: 16,
+  },
+
+  header:     { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  headerText: { flex: 1 },
   word:          { color: C.TEXT_PRIMARY, fontSize: 26, fontWeight: '700', letterSpacing: 0.5 },
   pronunciation: { color: C.TEXT_SECONDARY, fontSize: 14, marginTop: 4 },
+
+  closeBtn:  { paddingTop: 4 },
+  closeIcon: { color: C.TEXT_MUTED, fontSize: 18 },
 
   divider: { height: 1, backgroundColor: C.BORDER_DEFAULT, marginVertical: 16 },
 

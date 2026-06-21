@@ -115,6 +115,7 @@ export function ChatTab({
         ref={scrollRef}
         style={styles.transcript}
         contentContainerStyle={styles.transcriptContent}
+        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
       >
         {messages.map((m, i) =>
           m.role === 'user' ? (
