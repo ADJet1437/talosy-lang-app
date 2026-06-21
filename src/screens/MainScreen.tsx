@@ -76,6 +76,7 @@ export function MainScreen({ route, navigation }: Props) {
   const [suggestion, setSuggestion]               = useState('');
   const [suggestionPlaying, setSuggestionPlaying] = useState(false);
   const [suggestionSpeed, setSuggestionSpeed]     = useState(1.0);
+  const [isAILoading, setIsAILoading]             = useState(false);
   const [wordSheet, setWordSheet]                 = useState<{ word: string; context: string } | null>(null);
   const [activeTab, setActiveTab]                 = useState<ActiveTab>('chat');
   const [isImmersive, setIsImmersive]             = useState(false);
@@ -99,7 +100,8 @@ export function MainScreen({ route, navigation }: Props) {
   // the correct value regardless of React batching timing.
   const sessionLangRef = useRef({ lang: language, nativeLang: nativeLanguage });
 
-  const wsRef                = useRef<TalkosWS | null>(null);
+  const wsRef                    = useRef<TalkosWS | null>(null);
+  const pendingPracticeLessonRef = useRef<{ text: string; sentences?: string[] } | null>(null);
   const sessionIdRef         = useRef<string | null>(null);
   const scrollRef            = useRef<ScrollView>(null);
   const onFinishRef          = useRef<(() => void) | null>(null);
@@ -207,9 +209,15 @@ export function MainScreen({ route, navigation }: Props) {
     if (!topic) return;
     setActiveTab('chat');
     const sentences = route.params?.chatSentences;
-    const t = setTimeout(() => wsRef.current?.sendSetTopic(topic, sentences), 300);
-    return () => clearTimeout(t);
-  }, [route.params?.chatTopic]);
+    addMessage('user', `Let's practice: ${topic}`);
+    setIsAILoading(true);
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.sendPracticeLesson(topic, sentences);
+    } else {
+      // WS still connecting or was dropped — flush when onReady fires
+      pendingPracticeLessonRef.current = { text: topic, sentences };
+    }
+  }, [route.params?.chatTopic]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Streak ───────────────────────────────────────────────────────────────
 
@@ -252,6 +260,7 @@ export function MainScreen({ route, navigation }: Props) {
 
   async function submitSpeech() {
     setAppState('processing');
+    setIsAILoading(true);
     setSuggestion('');
     try {
       await recorder.stop();
@@ -365,6 +374,11 @@ export function MainScreen({ route, navigation }: Props) {
 
         const ws = new TalkosWS(sessionId, sessionLang, sessionNativeLang, {
           onReady: () => {
+            const pending = pendingPracticeLessonRef.current;
+            if (pending) {
+              pendingPracticeLessonRef.current = null;
+              ws.sendPracticeLesson(pending.text, pending.sentences);
+            }
             if (isImmersiveRef.current) enterListening();
             else setAppState('paused');
           },
@@ -372,6 +386,7 @@ export function MainScreen({ route, navigation }: Props) {
           onNoSpeech: () => { if (!isPausedRef.current && isImmersiveRef.current) enterListening(); },
           onAIResponse: (text, audio, translation, sug) => {
             if (!text || !audio) return;
+            setIsAILoading(false);
             suggestionPlayerRef.current?.pause?.();
             setSuggestionPlaying(false);
             setSuggestion('');
@@ -450,6 +465,7 @@ export function MainScreen({ route, navigation }: Props) {
     setMessages([]);
     setSuggestion('');
     setSuggestionPlaying(false);
+    setIsAILoading(false);
     flushStreaming();
     setAppState('connecting');
 
@@ -601,6 +617,7 @@ export function MainScreen({ route, navigation }: Props) {
           isManualRecording={isManualRecording}
           messages={messages}
           streamingText={streamingText}
+          isAILoading={isAILoading}
           suggestion={suggestion}
           suggestionPlaying={suggestionPlaying}
           suggestionSpeed={suggestionSpeed}

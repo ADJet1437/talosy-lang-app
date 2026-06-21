@@ -293,8 +293,10 @@ export class TalkosWS {
     this.ws.send(JSON.stringify({ type: 'speech', data: base64Audio }));
   }
 
-  sendSetTopic(text: string, sentences?: string[]) {
-    this.ws.send(JSON.stringify({ type: 'set_topic', text, sentences }));
+  sendPracticeLesson(text: string, sentences?: string[]) {
+    if (this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'practice_lesson', text, sentences }));
+    }
   }
 
   endSession() {

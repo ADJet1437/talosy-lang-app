@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   Animated,
   ActivityIndicator,
@@ -23,6 +23,7 @@ type Props = {
   isManualRecording: boolean;
   messages: Message[];
   streamingText: string;
+  isAILoading: boolean;
   suggestion: string;
   suggestionPlaying: boolean;
   suggestionSpeed: number;
@@ -45,12 +46,50 @@ const STATE_CONFIG: Record<AppState, { color: string; icon: string; spinner: boo
   ended:       { color: C.TEXT_MUTED,  icon: '✓',  spinner: false, label: 'Ended' },
 };
 
+function TypingIndicator() {
+  const dots = useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]).current;
+
+  useEffect(() => {
+    const anims = dots.map((dot, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 160),
+          Animated.timing(dot, { toValue: -5, duration: 280, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0,  duration: 280, useNativeDriver: true }),
+          Animated.delay((dots.length - i) * 160),
+        ])
+      )
+    );
+    const composite = Animated.parallel(anims);
+    composite.start();
+    return () => composite.stop();
+  }, []);
+
+  return (
+    <View style={typingStyles.row}>
+      {dots.map((dot, i) => (
+        <Animated.View key={i} style={[typingStyles.dot, { transform: [{ translateY: dot }] }]} />
+      ))}
+    </View>
+  );
+}
+
+const typingStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4, paddingHorizontal: 2 },
+  dot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: C.TEXT_MUTED },
+});
+
 export function ChatTab({
   appState,
   isImmersive,
   isManualRecording,
   messages,
   streamingText,
+  isAILoading,
   suggestion,
   suggestionPlaying,
   suggestionSpeed,
@@ -147,6 +186,14 @@ export function ChatTab({
             </View>
           )
         )}
+
+        {isAILoading && !streamingText ? (
+          <View style={styles.aiBubbleWrap}>
+            <View style={styles.aiBubble}>
+              <TypingIndicator />
+            </View>
+          </View>
+        ) : null}
 
         {streamingText ? (
           <View style={styles.aiBubbleWrap}>
