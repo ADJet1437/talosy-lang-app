@@ -16,6 +16,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useAuth } from '../context/AuthContext';
 import { ConversationGrowthChart } from './ConversationGrowthChart';
+import { LessonRadarChart } from './LessonRadarChart';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { C } from '../theme';
 
@@ -125,6 +126,9 @@ export function ProfileTab({
 
         {/* ── Conversation growth chart ──────────────────────────────────── */}
         {token && <ConversationGrowthChart token={token} />}
+
+        {/* ── Lesson coverage radar ──────────────────────────────────────── */}
+        <LessonRadarChart learnLang={learnLang} />
 
         {/* ── Conversation ───────────────────────────────────────────────── */}
         <Text style={styles.section}>Conversation</Text>

@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   LessonCategory,
@@ -60,6 +61,7 @@ function realState(lesson: LessonSummary): { state: NodeState; dots: number } {
 export function LessonsScreen({ learnLang = 'English', nativeLang = 'English' }: Props) {
   const navigation = useNavigation<Nav>();
   const { token } = useAuth();
+  const insets = useSafeAreaInsets();
   const [categories,        setCategories]        = useState<LessonCategory[]>([]);
   const [activeCategoryId,  setActiveCategoryId]  = useState<string | null>(null);
   const [loadingCategories, setLoadingCategories] = useState(true);
@@ -84,7 +86,7 @@ export function LessonsScreen({ learnLang = 'English', nativeLang = 'English' }:
     isStartingRef.current = true;
     setStarting(lesson.id);
     try {
-      const detail = await fetchLessonDetail(lesson.id, langCode(learnLang), token);
+      const detail = await fetchLessonDetail(lesson.id, langCode(learnLang), token, langCode(nativeLang));
       navigation.navigate('ChapterList', { lesson: detail, learnLang, nativeLang });
     } catch {
       // silent — user can retry
@@ -110,7 +112,7 @@ export function LessonsScreen({ learnLang = 'English', nativeLang = 'English' }:
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
 
       {/* ── Category jump tabs ──────────────────────────────────────────────── */}
       <ScrollView

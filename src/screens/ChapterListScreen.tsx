@@ -6,19 +6,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { LessonChapter, LessonItem, completeLessonItem } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { SentencePracticeSheet } from '../components/SentencePracticeSheet';
 import { C } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ChapterList'>;
-
-type PracticeContext = { items: LessonItem[]; startIndex: number };
 
 export function ChapterListScreen({ route, navigation }: Props) {
   const { lesson, learnLang = 'English', nativeLang = 'English' } = route.params;
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
-  const [practiceCtx, setPracticeCtx] = useState<PracticeContext | null>(null);
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+  const allItems = lesson.chapters.flatMap((ch) => ch.items);
 
   function isItemDone(item: LessonItem) {
     return item.completed || doneIds.has(item.id);
@@ -44,8 +41,7 @@ export function ChapterListScreen({ route, navigation }: Props) {
   }
 
   return (
-    <>
-      <View style={[styles.screen, { paddingTop: insets.top }]}>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.7}>
@@ -97,7 +93,14 @@ export function ChapterListScreen({ route, navigation }: Props) {
                     <TouchableOpacity
                       key={item.id}
                       style={styles.item}
-                      onPress={() => setPracticeCtx({ items: chapter.items, startIndex: idx })}
+                      onPress={() => navigation.navigate('SentenceDetail', {
+                        item,
+                        learnLang,
+                        nativeLang,
+                        onDone: handleItemDone,
+                        allItems,
+                        currentIndex: allItems.findIndex((i) => i.id === item.id),
+                      })}
                       activeOpacity={0.6}
                     >
                       <Text style={styles.itemIdx}>{String(idx + 1).padStart(2, '0')}</Text>
@@ -129,16 +132,6 @@ export function ChapterListScreen({ route, navigation }: Props) {
           })}
         </ScrollView>
       </View>
-
-      <SentencePracticeSheet
-        items={practiceCtx?.items ?? []}
-        startIndex={practiceCtx?.startIndex ?? 0}
-        visible={practiceCtx !== null}
-        doneIds={doneIds}
-        onClose={() => setPracticeCtx(null)}
-        onDone={handleItemDone}
-      />
-    </>
   );
 }
 

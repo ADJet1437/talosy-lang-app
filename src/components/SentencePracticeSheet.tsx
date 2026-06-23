@@ -2,10 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
+  KeyboardAvoidingView,
   Modal,
   PanResponder,
+  Platform,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -14,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LessonItem } from '../services/api';
 import { C } from '../theme';
 
-const SCREEN_W = Dimensions.get('window').width;
+const SCREEN_W       = Dimensions.get('window').width;
 const SWIPE_THRESHOLD = 60;
 
 type Props = {
@@ -26,7 +29,9 @@ type Props = {
   onDone: (itemId: string) => void;
 };
 
-type Step = 'fill_blank' | 'read_out';
+type Step = 'study' | 'fill_blank';
+
+// ── Problem builder ────────────────────────────────────────────────────────────
 
 const STOP = new Set([
   'jag','du','han','hon','det','vi','ni','de','och','men','eller','att','som',
@@ -42,27 +47,15 @@ function extractWords(sentence: string): string[] {
     .filter((w) => w.length >= 4 && !STOP.has(w.toLowerCase()));
 }
 
-function shuffled<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-function buildProblem(item: LessonItem, allItems: LessonItem[]) {
+function buildProblem(item: LessonItem) {
   const words = extractWords(item.sentence);
   if (words.length === 0) return null;
-  const target = words[Math.floor(Math.random() * words.length)];
+  const target       = words[Math.floor(Math.random() * words.length)];
   const blankSentence = item.sentence.replace(target, '_____');
-  const pool = allItems
-    .filter((i) => i.id !== item.id)
-    .flatMap((i) => extractWords(i.sentence))
-    .filter((w) => w.toLowerCase() !== target.toLowerCase());
-  const distractors = shuffled([...new Set(pool)]).slice(0, 2);
-  return { blankSentence, target, choices: shuffled([target, ...distractors]) };
+  return { blankSentence, target };
 }
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function SentencePracticeSheet({
   items,
@@ -73,177 +66,249 @@ export function SentencePracticeSheet({
   onDone,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const [index, setIndex] = useState(startIndex);
-  const [step, setStep] = useState<Step>('fill_blank');
-  const [selected, setSelected] = useState<string | null>(null);
-  const [problem, setProblem] = useState<ReturnType<typeof buildProblem>>(null);
-  const translateX = useRef(new Animated.Value(0)).current;
+
+  const [index,           setIndex]           = useState(startIndex);
+  const [step,            setStep]            = useState<Step>('study');
+  const [showTranslation, setShowTranslation] = useState(false);
+  const [typed,           setTyped]           = useState('');
+  const [checkResult,     setCheckResult]     = useState<'correct' | 'wrong' | null>(null);
+  const [problem,         setProblem]         = useState<ReturnType<typeof buildProblem>>(null);
+
+  const translateX  = useRef(new Animated.Value(0)).current;
+  const transFade   = useRef(new Animated.Value(0)).current;
+  const shakeAnim   = useRef(new Animated.Value(0)).current;
+  const inputRef    = useRef<TextInput>(null);
+  const navigating  = useRef(false);
 
   const item = items[index] ?? null;
 
-  // Reset state when sheet opens or item changes
+  // ── Sync index when sheet opens ────────────────────────────────────────────
   useEffect(() => {
     if (!visible) return;
     setIndex(startIndex);
   }, [visible, startIndex]);
 
+  // ── Reset all state when item changes ──────────────────────────────────────
   useEffect(() => {
     if (!item) return;
-    setStep('fill_blank');
-    setSelected(null);
-    setProblem(buildProblem(item, items));
+    setStep('study');
+    setShowTranslation(false);
+    transFade.setValue(0);
+    setTyped('');
+    setCheckResult(null);
+    setProblem(buildProblem(item));
     translateX.setValue(0);
-  }, [index, item?.id]);
+  }, [index, item?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Auto-focus input on fill_blank step ───────────────────────────────────
+  useEffect(() => {
+    if (step === 'fill_blank') {
+      setTimeout(() => inputRef.current?.focus(), 150);
+    }
+  }, [step]);
+
+  // ── Navigation ─────────────────────────────────────────────────────────────
   function goTo(nextIndex: number) {
+    if (navigating.current) return;
     if (nextIndex < 0 || nextIndex >= items.length) { onClose(); return; }
+    navigating.current = true;
     const dir = nextIndex > index ? -SCREEN_W : SCREEN_W;
     Animated.sequence([
-      Animated.timing(translateX, { toValue: dir, duration: 180, useNativeDriver: true }),
-      Animated.timing(translateX, { toValue: -dir, duration: 0, useNativeDriver: true }),
-      Animated.timing(translateX, { toValue: 0, duration: 180, useNativeDriver: true }),
-    ]).start(() => setIndex(nextIndex));
+      Animated.timing(translateX, { toValue: dir,  duration: 180, useNativeDriver: true }),
+      Animated.timing(translateX, { toValue: -dir, duration: 0,   useNativeDriver: true }),
+      Animated.timing(translateX, { toValue: 0,    duration: 180, useNativeDriver: true }),
+    ]).start(() => { navigating.current = false; setIndex(nextIndex); });
   }
 
   function goNext() { goTo(index + 1); }
   function goPrev() { goTo(index - 1); }
 
+  // ── Swipe to navigate ──────────────────────────────────────────────────────
   const panResponder = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_, gs) =>
       Math.abs(gs.dx) > 15 && Math.abs(gs.dy) < Math.abs(gs.dx),
-    onPanResponderMove: (_, gs) => {
-      translateX.setValue(gs.dx * 0.3);
-    },
+    onPanResponderMove:   (_, gs) => { translateX.setValue(gs.dx * 0.3); },
     onPanResponderRelease: (_, gs) => {
-      if (gs.dx > SWIPE_THRESHOLD) {
-        // swipe right → previous item
-        if (index > 0) { goPrev(); } else { Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start(); }
-      } else if (gs.dx < -SWIPE_THRESHOLD) {
-        // swipe left → next item
-        goNext();
-      } else {
-        Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
-      }
+      if      (gs.dx >  SWIPE_THRESHOLD && index > 0) goPrev();
+      else if (gs.dx < -SWIPE_THRESHOLD)              goNext();
+      else Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
     },
-  }), [index, items.length]);
+  }), [index, items.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleChoice(choice: string) {
-    if (selected || !problem) return;
-    setSelected(choice);
-    if (choice === problem.target) {
-      setTimeout(() => { setStep('read_out'); setSelected(null); }, 700);
+  // ── Study step handlers ────────────────────────────────────────────────────
+  function handleShowTranslation() {
+    setShowTranslation(true);
+    transFade.setValue(0);
+    Animated.timing(transFade, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+  }
+
+  // ── Fill-blank handlers ────────────────────────────────────────────────────
+  function handleCheck() {
+    if (!problem || !typed.trim() || checkResult) return;
+    const correct = typed.trim().toLowerCase() === problem.target.toLowerCase();
+    setCheckResult(correct ? 'correct' : 'wrong');
+    if (correct) {
+      setTimeout(handleDone, 550);
+    } else {
+      Animated.sequence([
+        Animated.timing(shakeAnim, { toValue:  8, duration: 55, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: -8, duration: 55, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue:  5, duration: 55, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue:  0, duration: 55, useNativeDriver: true }),
+      ]).start(() => {
+        setCheckResult(null);
+        setTyped('');
+        inputRef.current?.focus();
+      });
     }
   }
 
   function handleDone() {
     if (!item) return;
     onDone(item.id);
-    // Advance to next item or close
-    if (index + 1 < items.length) { goTo(index + 1); } else { onClose(); }
+    if (index + 1 < items.length) goTo(index + 1);
+    else onClose();
   }
 
+  // ── Early exits ────────────────────────────────────────────────────────────
   if (!visible || !item) return null;
 
   const isDone = item.completed || doneIds.has(item.id);
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
 
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
-        <View style={styles.handle} />
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
+          <View style={styles.handle} />
 
-        {/* Progress bar */}
-        <View style={styles.progressRow}>
-          <Text style={styles.progressText}>{index + 1} / {items.length}</Text>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${((index + 1) / items.length) * 100}%` }]} />
-          </View>
-        </View>
-
-        <Animated.View
-          style={{ transform: [{ translateX }] }}
-          {...panResponder.panHandlers}
-        >
-          {/* Step indicator */}
-          <View style={styles.stepRow}>
-            {(['fill_blank', 'read_out'] as Step[]).map((s) => (
-              <View key={s} style={[styles.stepDot, step === s && styles.stepDotActive]} />
-            ))}
+          {/* Progress */}
+          <View style={styles.progressRow}>
+            <Text style={styles.progressText}>{index + 1} / {items.length}</Text>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${((index + 1) / items.length) * 100}%` as any }]} />
+            </View>
           </View>
 
-          {/* Already-done badge */}
-          {isDone && (
-            <View style={styles.doneBadge}>
-              <Text style={styles.doneBadgeText}>✓ Already completed</Text>
+          <Animated.View style={{ transform: [{ translateX }] }} {...panResponder.panHandlers}>
+
+            {/* Step dots */}
+            <View style={styles.stepRow}>
+              {(['study', 'fill_blank'] as Step[]).map((s) => (
+                <View key={s} style={[styles.stepDot, step === s && styles.stepDotActive]} />
+              ))}
             </View>
-          )}
 
-          {step === 'fill_blank' && (
-            <View style={styles.stepContent}>
-              <Text style={styles.stepLabel}>Fill in the blank</Text>
-
-              {problem ? (
-                <>
-                  <Text style={styles.blankSentence}>{problem.blankSentence}</Text>
-                  <View style={styles.choices}>
-                    {problem.choices.map((choice) => {
-                      const isCorrect = choice === problem.target;
-                      const isSelected = selected === choice;
-                      const showCorrect = selected !== null && isCorrect;
-                      const showWrong = isSelected && !isCorrect;
-                      return (
-                        <TouchableOpacity
-                          key={choice}
-                          style={[
-                            styles.choiceBtn,
-                            showCorrect && styles.choiceBtnCorrect,
-                            showWrong && styles.choiceBtnWrong,
-                          ]}
-                          onPress={() => handleChoice(choice)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={[
-                            styles.choiceText,
-                            showCorrect && styles.choiceTextCorrect,
-                            showWrong && styles.choiceTextWrong,
-                          ]}>
-                            {choice}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                  {selected && selected !== problem.target && (
-                    <TouchableOpacity style={styles.retryBtn} onPress={() => setSelected(null)} activeOpacity={0.7}>
-                      <Text style={styles.retryText}>Try again</Text>
-                    </TouchableOpacity>
-                  )}
-                </>
-              ) : (
-                <TouchableOpacity style={styles.primaryBtn} onPress={() => setStep('read_out')} activeOpacity={0.7}>
-                  <Text style={styles.primaryBtnText}>Next →</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-
-          {step === 'read_out' && (
-            <View style={styles.stepContent}>
-              <Text style={styles.stepLabel}>Read it out</Text>
-              <Text style={styles.fullSentence}>{item.sentence}</Text>
-              <View style={styles.actions}>
-                <TouchableOpacity style={styles.skipBtn} onPress={goNext} activeOpacity={0.7}>
-                  <Text style={styles.skipText}>Skip →</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.primaryBtn} onPress={handleDone} activeOpacity={0.7}>
-                  <Text style={styles.primaryBtnText}>Mark done ✓</Text>
-                </TouchableOpacity>
+            {/* Already-done badge */}
+            {isDone && (
+              <View style={styles.doneBadge}>
+                <Text style={styles.doneBadgeText}>✓ Already completed</Text>
               </View>
-            </View>
-          )}
-        </Animated.View>
-      </View>
+            )}
+
+            {/* ── Step 1: Study ─────────────────────────────────────────────── */}
+            {step === 'study' && (
+              <View style={styles.stepContent}>
+                <Text style={styles.stepLabel}>Study</Text>
+
+                <Text style={styles.fullSentence}>{item.sentence}</Text>
+
+                {/* Translation reveal */}
+                {!showTranslation ? (
+                  <TouchableOpacity
+                    style={styles.showTransBtn}
+                    onPress={handleShowTranslation}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.showTransText}>Show translation</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <>
+                    <Animated.Text style={[styles.translation, { opacity: transFade }]}>
+                      {item.translation ?? '—'}
+                    </Animated.Text>
+                    <TouchableOpacity
+                      style={[styles.primaryBtn, styles.primaryBtnFull]}
+                      onPress={() => setStep('fill_blank')}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.primaryBtnText}>Next ›</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            )}
+
+            {/* ── Step 2: Fill in the blank ─────────────────────────────────── */}
+            {step === 'fill_blank' && (
+              <View style={styles.stepContent}>
+                <Text style={styles.stepLabel}>Fill in the blank</Text>
+
+                {problem ? (
+                  <>
+                    <Text style={styles.blankSentence}>{problem.blankSentence}</Text>
+
+                    <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
+                      <TextInput
+                        ref={inputRef}
+                        style={[
+                          styles.textInput,
+                          checkResult === 'correct' && styles.textInputCorrect,
+                          checkResult === 'wrong'   && styles.textInputWrong,
+                        ]}
+                        value={typed}
+                        onChangeText={checkResult ? undefined : setTyped}
+                        placeholder="Type the missing word…"
+                        placeholderTextColor={C.TEXT_MUTED}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        returnKeyType="done"
+                        onSubmitEditing={handleCheck}
+                        editable={checkResult !== 'correct'}
+                      />
+                    </Animated.View>
+
+                    {checkResult === 'correct' && (
+                      <Text style={styles.feedbackCorrect}>✓ Correct!</Text>
+                    )}
+                    {checkResult === 'wrong' && (
+                      <Text style={styles.feedbackWrong}>✗ Try again</Text>
+                    )}
+
+                    <View style={styles.actions}>
+                      <TouchableOpacity
+                        style={styles.backBtnRow}
+                        onPress={() => { setStep('study'); setTyped(''); setCheckResult(null); }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.backBtnText}>‹ Back</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.primaryBtn, !typed.trim() && styles.primaryBtnDisabled]}
+                        onPress={handleCheck}
+                        activeOpacity={0.7}
+                        disabled={!typed.trim() || checkResult === 'correct'}
+                      >
+                        <Text style={styles.primaryBtnText}>Check</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
+                  // No blankable word — mark done directly
+                  <TouchableOpacity style={[styles.primaryBtn, styles.primaryBtnFull]} onPress={handleDone} activeOpacity={0.7}>
+                    <Text style={styles.primaryBtnText}>Mark done ✓</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+          </Animated.View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -281,57 +346,63 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     backgroundColor: '#052e16',
     borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 10, paddingVertical: 4,
     marginBottom: 4,
   },
   doneBadgeText: { color: C.GREEN, fontSize: 11, fontWeight: '700' },
 
-  stepContent: { gap: 14 },
+  stepContent: { gap: 16 },
   stepLabel: {
-    color: C.TEXT_MUTED,
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    color: C.TEXT_MUTED, fontSize: 11, fontWeight: '700',
+    textTransform: 'uppercase', letterSpacing: 0.8,
   },
 
-  blankSentence: { color: C.TEXT_PRIMARY, fontSize: 18, fontWeight: '600', lineHeight: 26 },
-
-  choices: { gap: 10 },
-  choiceBtn: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: C.BG_ELEVATED,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  choiceBtnCorrect: { backgroundColor: '#052e16', borderColor: C.GREEN },
-  choiceBtnWrong:   { backgroundColor: '#2d0a0a', borderColor: C.RED },
-  choiceText:        { color: C.TEXT_PRIMARY, fontSize: 16, fontWeight: '600' },
-  choiceTextCorrect: { color: C.GREEN },
-  choiceTextWrong:   { color: C.RED },
-
-  retryBtn: { alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 20 },
-  retryText: { color: C.BLUE, fontSize: 14, fontWeight: '600' },
-
-  fullSentence: { color: C.TEXT_PRIMARY, fontSize: 20, fontWeight: '600', lineHeight: 30 },
-
-  actions:  { flexDirection: 'row', gap: 12 },
-  skipBtn: {
+  actions: { flexDirection: 'row', gap: 12 },
+  backBtnRow: {
     flex: 1, height: 48,
     borderRadius: 12,
     backgroundColor: C.BG_ELEVATED,
     alignItems: 'center', justifyContent: 'center',
   },
-  skipText: { color: C.TEXT_SECONDARY, fontSize: 15, fontWeight: '600' },
+  backBtnText: { color: C.TEXT_SECONDARY, fontSize: 15, fontWeight: '600' },
+
+  // ── Study step ─────────────────────────────────────────────────────────────
+  fullSentence: { color: C.TEXT_PRIMARY, fontSize: 20, fontWeight: '600', lineHeight: 30 },
+
+  showTransBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1, borderColor: C.BORDER_STRONG,
+  },
+  showTransText: { color: C.TEXT_SECONDARY, fontSize: 13, fontWeight: '600' },
+
+  translation: { color: C.TEXT_MUTED, fontSize: 16, fontStyle: 'italic', lineHeight: 24 },
+
+  // ── Fill blank step ────────────────────────────────────────────────────────
+  blankSentence: { color: C.TEXT_PRIMARY, fontSize: 18, fontWeight: '600', lineHeight: 26 },
+
+  textInput: {
+    backgroundColor: C.BG_ELEVATED,
+    borderRadius: 12,
+    borderWidth: 2, borderColor: 'transparent',
+    paddingHorizontal: 16, paddingVertical: 14,
+    color: C.TEXT_PRIMARY,
+    fontSize: 17, fontWeight: '600',
+  },
+  textInputCorrect: { borderColor: C.GREEN, backgroundColor: '#052e16' },
+  textInputWrong:   { borderColor: C.RED,   backgroundColor: '#2d0a0a' },
+
+  feedbackCorrect: { color: C.GREEN, fontSize: 13, fontWeight: '700' },
+  feedbackWrong:   { color: C.RED,   fontSize: 13, fontWeight: '700' },
 
   primaryBtn: {
     flex: 2, height: 48,
     borderRadius: 12,
     backgroundColor: C.GREEN,
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center' as const, justifyContent: 'center' as const,
   },
+  primaryBtnFull: { flex: 0 },
+  primaryBtnDisabled: { opacity: 0.4 },
   primaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 });

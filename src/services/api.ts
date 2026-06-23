@@ -17,8 +17,15 @@ const WS_BASE = `ws://${HOST}:8000/api/v1`;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+// Fill-in-blank
+export type FillBlankPart =
+  | { type: 'text'; value: string }
+  | { type: 'blank'; answer: string };
+
+export type FillBlankLevel = { level: number; parts: FillBlankPart[] };
+
 // Lessons
-export type LessonItem     = { id: string; sentence: string; completed: boolean };
+export type LessonItem     = { id: string; sentence: string; completed: boolean; translation?: string };
 export type LessonChapter  = { number: number; title: string; items: LessonItem[] };
 export type LessonSummary  = {
   id: string;
@@ -64,11 +71,29 @@ export async function fetchLessonDetail(
   lessonId: string,
   language = 'en',
   token?: string | null,
+  nativeLang = 'en',
 ): Promise<LessonDetail> {
   const headers: Record<string, string> = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${BASE_URL}/lessons/${lessonId}?language=${language}`, { headers });
+  const res = await fetch(
+    `${BASE_URL}/lessons/${lessonId}?language=${language}&native_language=${nativeLang}`,
+    { headers },
+  );
   if (!res.ok) throw new Error('Failed to fetch lesson');
+  return res.json();
+}
+
+export async function generateFillBlank(
+  sentence: string,
+  language: string,
+  token: string,
+): Promise<FillBlankLevel[]> {
+  const res = await fetch(`${BASE_URL}/lessons/fill-blank`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ sentence, language }),
+  });
+  if (!res.ok) throw new Error(`fill-blank failed: ${res.status}`);
   return res.json();
 }
 
@@ -206,6 +231,24 @@ export async function createSession(
   return data.session_id;
 }
 
+
+// ArrayBuffer-based TTS fetch — reliable on React Native / Hermes (no FileReader)
+export async function fetchTTSArrayBuffer(text: string, speed = 1.0): Promise<string> {
+  const res = await fetch(`${BASE_URL}/talkos/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, speed }),
+  });
+  if (!res.ok) throw new Error(`TTS failed: ${res.status}`);
+  const buffer = await res.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const chunk = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...(bytes.subarray(i, i + chunk) as unknown as number[]));
+  }
+  return btoa(binary);
+}
 
 export async function fetchTTSBase64(text: string, speed: number): Promise<string> {
   const res = await fetch(`${BASE_URL}/talkos/tts`, {
