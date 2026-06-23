@@ -8,6 +8,7 @@ import { LoginScreen } from '../screens/LoginScreen';
 import { MainScreen } from '../screens/MainScreen';
 import { ChapterListScreen } from '../screens/ChapterListScreen';
 import { SentenceDetailScreen } from '../screens/SentenceDetailScreen';
+import { SpeakingPracticeScreen } from '../screens/SpeakingPracticeScreen';
 import { LessonCallScreen } from '../screens/LessonCallScreen';
 import { ConversationHistoryScreen } from '../screens/ConversationHistoryScreen';
 import { ConversationDetailScreen } from '../screens/ConversationDetailScreen';
@@ -18,6 +19,7 @@ export type RootStackParamList = {
   Main: { resumeSessionId?: string; resumeLanguage?: string; resumeNativeLanguage?: string } | undefined;
   ChapterList: { lesson: LessonDetail; learnLang: string; nativeLang: string };
   SentenceDetail: { item: LessonItem; learnLang: string; nativeLang: string; onDone: (itemId: string) => void; allItems?: LessonItem[]; currentIndex?: number };
+  SpeakingPractice: { sentences: string[]; language: string; chapterTitle: string };
   LessonCall: { topic: string; sentences: string[]; language: string; nativeLanguage: string };
   ConversationHistory: undefined;
   ConversationDetail: { session: ConversationSummary };
@@ -52,6 +54,7 @@ export function AppNavigator() {
           <Stack.Screen name="Main" component={MainScreen} options={{ headerShown: false }} />
           <Stack.Screen name="ChapterList" component={ChapterListScreen} options={{ headerShown: false }} />
           <Stack.Screen name="SentenceDetail" component={SentenceDetailScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="SpeakingPractice" component={SpeakingPracticeScreen} options={{ headerShown: false }} />
           <Stack.Screen name="LessonCall" component={LessonCallScreen} options={{ headerShown: false }} />
           <Stack.Screen name="ConversationHistory" component={ConversationHistoryScreen} options={{ headerShown: false }} />
           <Stack.Screen name="ConversationDetail" component={ConversationDetailScreen} options={{ headerShown: false }} />

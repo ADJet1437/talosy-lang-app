@@ -30,13 +30,12 @@ export function ChapterListScreen({ route, navigation }: Props) {
     if (token) completeLessonItem(token, itemId).catch(() => {});
   }
 
-  function handlePracticeInChat(chapter: LessonChapter) {
+  function handleSpeakingPractice(chapter: LessonChapter) {
     const sentences = chapter.items.filter(isItemDone).map((i) => i.sentence);
-    navigation.navigate('LessonCall', {
-      topic: lesson.title,
+    navigation.navigate('SpeakingPractice', {
       sentences,
       language: learnLang,
-      nativeLanguage: nativeLang,
+      chapterTitle: chapter.title,
     });
   }
 
@@ -49,17 +48,6 @@ export function ChapterListScreen({ route, navigation }: Props) {
             <Text style={styles.backLabel}>Back</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle} numberOfLines={1}>{lesson.title}</Text>
-          <View style={[
-            styles.diffBadge,
-            lesson.difficulty === 'beginner' ? styles.badgeBeginner : styles.badgeIntermediate,
-          ]}>
-            <Text style={[
-              styles.diffBadgeText,
-              lesson.difficulty === 'beginner' ? styles.badgeBeginnerText : styles.badgeIntermediateText,
-            ]}>
-              {lesson.difficulty}
-            </Text>
-          </View>
         </View>
 
         {/* Chapter list */}
@@ -120,10 +108,10 @@ export function ChapterListScreen({ route, navigation }: Props) {
                     </View>
                     <TouchableOpacity
                       style={styles.chatBtn}
-                      onPress={() => handlePracticeInChat(chapter)}
+                      onPress={() => handleSpeakingPractice(chapter)}
                       activeOpacity={0.75}
                     >
-                      <Text style={styles.chatBtnText}>Chat →</Text>
+                      <Text style={styles.chatBtnText}>Speak →</Text>
                     </TouchableOpacity>
                   </View>
                 )}

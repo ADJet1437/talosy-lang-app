@@ -80,7 +80,7 @@ export function LessonRadarChart({ learnLang }: Props) {
     <View style={styles.card}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Lesson Coverage</Text>
+          <Text style={styles.title}>Topic Radar</Text>
           {!loading && N >= 3 && (
             <Text style={styles.subtitle}>{avgPct}% average completion</Text>
           )}

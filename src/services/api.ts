@@ -31,7 +31,6 @@ export type LessonSummary  = {
   id: string;
   title: string;
   description: string;
-  difficulty: 'beginner' | 'intermediate';
   total_items: number;
   done_items: number;
 };
@@ -80,6 +79,24 @@ export async function fetchLessonDetail(
     { headers },
   );
   if (!res.ok) throw new Error('Failed to fetch lesson');
+  return res.json();
+}
+
+export type SpeakingFeedbackResult = { transcript: string; feedback: string };
+
+export async function fetchSpeakingFeedback(
+  audioBase64: string,
+  sentence: string,
+  language: string,
+  token: string,
+  filename = 'speech.m4a',
+): Promise<SpeakingFeedbackResult> {
+  const res = await fetch(`${BASE_URL}/lessons/speaking-feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ audio_base64: audioBase64, filename, sentence, language }),
+  });
+  if (!res.ok) throw new Error(`speaking-feedback failed: ${res.status}`);
   return res.json();
 }
 

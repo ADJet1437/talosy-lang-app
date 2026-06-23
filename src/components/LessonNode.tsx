@@ -36,22 +36,19 @@ export function LessonNode({ lesson, index, position, nodeState, doneDots, isSta
   const isDone   = nodeState === 'done';
   const isLocked = nodeState === 'locked';
   const isActive = nodeState === 'active';
-  const isGreen  = lesson.difficulty === 'beginner';
-
-  const circleBg    = isDone   ? (isGreen ? C.GREEN : C.ORANGE)
+  const circleBg    = isDone   ? C.GREEN
                     : isLocked ? C.BG_ELEVATED
                     : C.BG_ELEVATED;
 
-  const borderColor = isDone   ? (isGreen ? C.GREEN : C.ORANGE)
+  const borderColor = isDone   ? C.GREEN
                     : isActive  ? C.BLUE
-                    : isLocked  ? C.BORDER_DEFAULT
                     : C.BORDER_DEFAULT;
 
   const borderWidth = isActive ? 3 : 2;
   const numColor    = isDone ? C.TEXT_ON_COLOR : isLocked ? C.TEXT_MUTED : C.TEXT_PRIMARY;
 
-  const dotColor    = isDone   ? (isGreen ? C.GREEN : C.ORANGE)
-                    : isActive  ? C.BLUE
+  const dotColor    = isDone  ? C.GREEN
+                    : isActive ? C.BLUE
                     : C.BORDER_STRONG;
 
   return (

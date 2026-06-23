@@ -80,19 +80,6 @@ export function ChapterListComponent({ visible, lesson, onClose }: Props) {
                 <Text style={styles.backLabel}>Back</Text>
               </TouchableOpacity>
               <Text style={styles.headerTitle} numberOfLines={1}>{lesson?.title ?? ''}</Text>
-              {lesson && (
-                <View style={[
-                  styles.diffBadge,
-                  lesson.difficulty === 'beginner' ? styles.badgeBeginner : styles.badgeIntermediate,
-                ]}>
-                  <Text style={[
-                    styles.diffBadgeText,
-                    lesson.difficulty === 'beginner' ? styles.badgeBeginnerText : styles.badgeIntermediateText,
-                  ]}>
-                    {lesson.difficulty}
-                  </Text>
-                </View>
-              )}
             </View>
 
             {/* Chapter list */}
