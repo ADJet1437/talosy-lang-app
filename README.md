@@ -13,6 +13,19 @@ An AI-powered language learning mobile app built with **Expo** and **React Nativ
 - **Streak Tracking** — Daily streak and longest streak with progress visualisation
 - **Google Sign-In** — OAuth login with deep link redirect
 
+## Screenshots
+
+<p align="center">
+  <img src="assets/talkos-demo.gif" width="300" alt="Live AI conversation demo" />
+</p>
+
+<p align="center">
+  <img src="assets/talkos-lessons.png" width="220" alt="Lessons" />
+  <img src="assets/talkos-sentence-practice.png" width="220" alt="Sentence practice" />
+  <img src="assets/talkos-challenges.png" width="220" alt="Challenges" />
+  <img src="assets/talkos-topic-radar.png" width="220" alt="Topic radar" />
+</p>
+
 ## Tech Stack
 
 - [Expo](https://expo.dev) (SDK 56)
